@@ -117,6 +117,22 @@ def build():
         monthly_map[x["d"][:7]] += x["a"]
     monthly = [{"m": m, "v": round(monthly_map[m])} for m in sorted(monthly_map)]
 
+    # Under picking — live snapshot (current, NOT date-filtered): B2B delivery notes still being picked
+    up = _query(
+        "Delivery Note",
+        ["name", "customer",
+         "`tabDelivery Note Item`.qty", "`tabDelivery Note Item`.amount"],
+        [["custom_is_b2b", "=", 1], ["status", "=", "Under Picking"]],
+    )
+    up_agg = collections.defaultdict(lambda: {"v": 0.0, "q": 0.0, "notes": set()})
+    for r in up:
+        a = up_agg[_norm(r.get("customer"))]
+        a["v"] += r.get("amount") or 0
+        a["q"] += r.get("qty") or 0
+        a["notes"].add(r.get("name"))
+    underpick = [{"k": d, "v": round(a["v"]), "q": round(a["q"]), "n": len(a["notes"])}
+                 for d, a in up_agg.items()]
+
     now = datetime.datetime.now()
     return {
         "today": now.date().isoformat(),
@@ -128,6 +144,7 @@ def build():
         "lines": lines,
         "dealers": dealers,
         "monthly": monthly,
+        "underpick": underpick,
         "netTotal": round(sum(x["a"] for x in lines)),
     }
 

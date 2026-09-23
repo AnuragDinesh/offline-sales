@@ -1,5 +1,5 @@
 <meta charset="utf-8">
-<title>Offline Sales Dashboard</title>
+<title>Ten &#215; You Offline Sales</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
@@ -133,8 +133,9 @@ select{font-family:inherit;font-size:12.5px;color:var(--ink);background:var(--su
 .gatecard{width:100%;max-width:370px;text-align:center;background:var(--surface);border:1px solid var(--border);border-radius:20px;box-shadow:0 26px 64px rgba(0,0,0,.4);padding:36px 32px;}
 .gatecard .ball{width:66px;height:66px;margin:0 auto 16px;filter:drop-shadow(0 6px 10px rgba(192,57,43,.3));}
 .gatecard .ovr{font-family:"Archivo";font-size:11px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);}
-.gatecard h1{font-family:"Archivo";font-size:36px;font-weight:800;letter-spacing:-.01em;margin:5px 0 7px;color:#c0392b;}
+.gatecard h1{font-family:"Archivo";font-size:33px;font-weight:800;letter-spacing:-.01em;margin:3px 0 8px;color:var(--ink);}
 .gatecard p{font-size:13px;color:var(--ink-soft);margin:0 0 18px;}
+.gatecard .egg{color:#c0392b;font-weight:700;}
 .gatecard input{width:100%;font-size:15px;text-align:center;padding:11px 12px;border:1px solid var(--border);border-radius:11px;background:var(--inset);color:var(--ink);margin-bottom:10px;}
 .gatecard input:focus{outline:none;border-color:#c0392b;}
 .gatecard button{width:100%;font-family:"Archivo";font-weight:700;font-size:14px;color:#fff;background:#c0392b;border:none;border-radius:11px;padding:11px;cursor:pointer;}
@@ -146,9 +147,9 @@ select{font-family:inherit;font-size:12.5px;color:var(--ink);background:var(--su
 <div id="gate" class="gate">
   <div class="gatecard">
     <div class="ball"><svg viewBox="0 0 64 64" width="66" height="66"><circle cx="32" cy="32" r="29" fill="#c0392b" stroke="#7d251c" stroke-width="2"/><path d="M21 5 Q41 32 21 59" fill="none" stroke="#f2e9c9" stroke-width="2.5"/><g stroke="#f2e9c9" stroke-width="2" stroke-linecap="round"><path d="M18 11 l6 2"/><path d="M16 19 l6 1.6"/><path d="M15 27 l6 1"/><path d="M15 35 l6 -1"/><path d="M16 43 l6 -1.6"/><path d="M18 51 l6 -2"/></g></svg></div>
-    <div class="ovr">Ten &#215; You &#183; Offline Sales</div>
-    <h1>Howzat?</h1>
-    <p>Enter the team password to walk out to the crease.</p>
+    <div class="ovr">Ten &#215; You</div>
+    <h1>Offline Sales</h1>
+    <p><b class="egg">Howzat?</b> Enter the team password to walk out to the crease.</p>
     <input id="gpw" type="password" placeholder="Password" autocomplete="off">
     <button id="gbtn">Take guard &#8594;</button>
     <div class="gerr" id="gerr" hidden>Not out &#8212; that's not the password. Try again.</div>
@@ -175,6 +176,7 @@ select{font-family:inherit;font-size:12.5px;color:var(--ink);background:var(--su
       <figure class="card" style="margin:0"><div class="head"><h3>Team member performance</h3><div class="pctl" id="ovt-period"></div></div><div class="bars" id="ovt-bars"></div></figure>
       <figure class="card" style="margin:0"><div class="head"><h3>Product split</h3><div class="pctl" id="ovp-period"></div></div><div id="ovp-pie"></div></figure>
     </div>
+    <figure class="card" style="margin-top:14px"><div class="head"><h3>Under picking &#8212; by dealer</h3><span class="note">live snapshot &#183; current orders under picking (not tied to the period)</span></div><div id="ov-uppie"></div></figure>
   </div>
 
   <div class="section" data-sec="team" hidden>
@@ -217,6 +219,8 @@ const teamColor=t=>COLOURS[t]||"#96a4ab";
 const teamOf=k=>{const a=ASSIGN[k];if(!a)return null;if(a.excluded)return false;return a.team||null;};
 const offDealers=()=>DATA.dealers.filter(d=>!ASSIGN[d.name].excluded);
 const baseLines=()=>DATA.lines.filter(l=>teamOf(l.k)!==false);
+function upMap(){if(!DATA._up)DATA._up=Object.fromEntries((DATA.underpick||[]).map(u=>[u.k,u]));return DATA._up;}
+function upVal(r){if(!r||!r.dealers)return 0;const u=upMap();let s=0;r.dealers.forEach(d=>{if(u[d])s+=u[d].v||0;});return s;}
 
 function rangeFor(st){if(st.mode==="MTD")return[MONTH_START,TODAY];if(st.mode==="YTD")return[YEAR_MIN,TODAY];return[st.from||YEAR_MIN,st.to||TODAY];}
 function makePeriod(host,st,cb){
@@ -243,18 +247,19 @@ const MEAS={
  value:{label:"Sales value (net)",fmt:r=>inr(r.value),val:r=>r.value,num:1,neg:1},
  qty:{label:"Units (net)",fmt:r=>Math.round(r.qty).toLocaleString("en-IN"),val:r=>r.qty,num:1,neg:1},
  last:{label:"Last order",fmt:r=>shortDate(r.last),val:r=>r.last,num:0},
+ underpick:{label:"Under picking (live)",fmt:r=>inr(upVal(r)),val:r=>upVal(r),num:1,neg:0},
 };
 function pivot(lines,dims){const map=new Map();
  for(const l of lines){const key=dims.map(d=>DIMS[d].get(l)).join("␟");let g=map.get(key);
-   if(!g){g={dv:{},value:0,qty:0,last:""};dims.forEach(d=>g.dv[d]=DIMS[d].get(l));map.set(key,g);}
-   g.value+=l.a;g.qty+=l.q;if(l.d>g.last)g.last=l.d;}
+   if(!g){g={dv:{},value:0,qty:0,last:"",dealers:new Set()};dims.forEach(d=>g.dv[d]=DIMS[d].get(l));map.set(key,g);}
+   g.value+=l.a;g.qty+=l.q;if(l.d>g.last)g.last=l.d;g.dealers.add(l.k);}
  return [...map.values()];}
 
 const TABS={
- team:{title:"Team members",avail:{dims:["team","dealer","product","colour","size","sku"],meas:["value"]},lockDim:"team",chain:["dealer"],filt:[],
-   cols:[{t:"dim",k:"team"},{t:"meas",k:"value"}],sort:null,search:"",filters:{},expanded:new Set()},
- dealers:{title:"Dealers",avail:{dims:["dealer","team","product","colour","size","sku","month"],meas:["value","qty","last"]},lockDim:"dealer",chain:["product","colour","size"],filt:["dealer","team","product","colour","size","sku","month"],
-   cols:[{t:"dim",k:"dealer"},{t:"dim",k:"team"},{t:"meas",k:"value"}],sort:null,search:"",filters:{},expanded:new Set()},
+ team:{title:"Team members",avail:{dims:["team","dealer","product","colour","size","sku"],meas:["value","underpick"]},lockDim:"team",chain:["dealer"],filt:[],
+   cols:[{t:"dim",k:"team"},{t:"meas",k:"value"},{t:"meas",k:"underpick"}],sort:null,search:"",filters:{},expanded:new Set()},
+ dealers:{title:"Dealers",avail:{dims:["dealer","team","product","colour","size","sku","month"],meas:["value","qty","underpick","last"]},lockDim:"dealer",chain:["product","colour","size"],filt:["dealer","team","product","colour","size","sku","month"],
+   cols:[{t:"dim",k:"dealer"},{t:"dim",k:"team"},{t:"meas",k:"value"},{t:"meas",k:"underpick"}],sort:null,search:"",filters:{},expanded:new Set()},
  products:{title:"Products",avail:{dims:["product","dealer","team","colour","size","sku","month"],meas:["qty","value","last"]},lockDim:"product",chain:["colour","size"],filt:["product","dealer","team","colour","size","sku","month"],
    cols:[{t:"dim",k:"product"},{t:"meas",k:"qty"},{t:"meas",k:"value"}],sort:null,search:"",filters:{},expanded:new Set()},
 };
@@ -285,10 +290,10 @@ function renderPivot(id){const st=TABS[id];let lines=applyFilters(periodLines(),
    const lensName=(id==="dealers")?r.dv.dealer:null;
    body+=`<tr class="${expandable?'parent':''} ${open?'open':''}" data-exp="${esc(bkey)}">${treeCell(esc(v0),0,expandable,dot,true,lensName)}${measCells(st.cols,r,false)}</tr>`;
    if(open){const fl=lines.filter(l=>dims.every(d=>DIMS[d].get(l)===r.dv[d]));body+=subTree(fl,remain,1,bkey,st.cols,st);}});
- const tot={value:rows.reduce((s,r)=>s+r.value,0),qty:rows.reduce((s,r)=>s+r.qty,0)};
+ const tot={value:rows.reduce((s,r)=>s+r.value,0),qty:rows.reduce((s,r)=>s+r.qty,0),dealers:new Set()};rows.forEach(r=>r.dealers&&r.dealers.forEach(d=>tot.dealers.add(d)));
  const totc=st.cols.map((c,i)=>i===0?"<td>Total</td>":c.t==="meas"&&c.k!=="last"?`<td class="num tnum">${MEAS[c.k].fmt(tot)}</td>`:"<td></td>").join("");
  document.getElementById(id+"-table").innerHTML=`<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody><tfoot><tr>${totc}</tr></tfoot></table>`;
- document.getElementById(id+"-note").textContent=`${rows.length} rows · ${lines.length} order lines in period`;
+ document.getElementById(id+"-note").textContent=`${rows.length} rows · ${lines.length} order lines in period`+(st.cols.some(c=>c.t==="meas"&&c.k==="underpick")?" · Under picking = live snapshot (current, not filtered by the selected dates)":"");
  wireTable(id,expandable);
  {const _h=st.cols.map(c=>c.t==="dim"?DIMS[c.k].label:MEAS[c.k].label),_r=rows.map(r=>st.cols.map(c=>c.t==="dim"?r.dv[c.k]:MEAS[c.k].num?Math.round(MEAS[c.k].val(r)):r.last)),_e=document.getElementById(id+"-table");_e._export={head:_h,rows:_r};_e._csv=()=>toCSV(_h,_r);}
 }
@@ -371,7 +376,10 @@ let ovtP={mode:"MTD"},ovpP={mode:"MTD"};
 function renderOverview(){const lines=periodLines(),net=lines.reduce((s,l)=>s+l.a,0),dealers=new Set(lines.map(l=>l.k)),untag=DATA.dealers.filter(d=>!d.excluded&&!ASSIGN[d.name].team).length;
  document.getElementById("ov-callout").textContent=`Action needed — ${untag} dealers awaiting a team member`;
  document.getElementById("ov-kpis").innerHTML=[{c:"hero",l:"Net offline sales",big:cr(net),sub:`${shortDate(gFrom)} – ${shortDate(gTo)}`},{l:"Active dealers",big:dealers.size,sub:"unique dealers billed in period"}].map(k=>`<div class="kpi ${k.c||''}"><div class="lab">${k.l}</div><div class="big tnum">${k.big}</div><div class="sub tnum">${k.sub}</div></div>`).join("");
- renderMonthChart();}
+ renderMonthChart();renderUnderpickPie();}
+function renderUnderpickPie(){const u=upMap();let items=offDealers().map(d=>({k:d.name,v:(u[d.name]?u[d.name].v:0)})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v);const tot=items.reduce((s,x)=>s+x.v,0);if(items.length>7){const top=items.slice(0,7),o=items.slice(7).reduce((s,x)=>s+x.v,0);items=top.concat([{k:"Other",v:o}]);}
+ if(!items.length){document.getElementById("ov-uppie").innerHTML='<div class="tblnote" style="padding:22px 0;text-align:center">No offline orders are under picking right now &#8212; this fills in live as soon as one is.</div>';return;}
+ pieInto("ov-uppie",items,tot);}
 function renderMonthChart(){const all=DATA.monthly.map(x=>x.m),fs=document.getElementById("mfrom"),ts=document.getElementById("mto");
  if(!fs.options.length){all.forEach(m=>{fs.add(new Option(monLabel(m),m));ts.add(new Option(monLabel(m),m));});fs.value=all[0];ts.value=all[all.length-1];fs.onchange=ts.onchange=renderMonthChart;}
  let ms=DATA.monthly.filter(x=>x.m>=fs.value&&x.m<=ts.value);if(!ms.length)ms=DATA.monthly;monthBars("ov-month",ms,720,250);
@@ -409,17 +417,17 @@ function renderLens(){document.getElementById("lens-range").textContent=`${short
  if(ms.length>1)monthBars("lens-month",ms,560,230);else document.getElementById("lens-month").innerHTML=`<div class="tblnote" style="padding:24px 0;text-align:center">Selected range covers one month &#8212; widen the period to see a trend.</div>`;}
 
 /* management */
-let mgmtUnlocked=true,mSearch="",mUntagOnly=false;
+let mgmtUnlocked=true,mSearch="",mTeamF="";
 function renderMgmt(){const gate=document.getElementById("mgmt-gate"),body=document.getElementById("mgmt-body");
  if(!mgmtUnlocked){body.hidden=true;gate.hidden=false;gate.innerHTML=`<div class="mgmt-lock"><div class="ic"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></div><h3>Management is protected</h3><p>Enter the team password to manage members and dealer tagging.</p><input type="password" id="pw" placeholder="Password"><button id="pwbtn">Unlock</button><div class="hint">Demo password: <b>tenxyou</b> &middot; real password set before deploy</div></div>`;
   const go=()=>{if(document.getElementById("pw").value.trim().toLowerCase()==="tenxyou"){mgmtUnlocked=true;renderMgmt();}else document.getElementById("pw").style.borderColor="var(--neg)";};document.getElementById("pwbtn").onclick=go;document.getElementById("pw").onkeydown=e=>{if(e.key==="Enter")go();};return;}
  gate.hidden=true;body.hidden=false;const dealers=[...DATA.dealers].sort((a,b)=>b.value-a.value),untag=dealers.filter(d=>!ASSIGN[d.name].excluded&&!ASSIGN[d.name].team).length,tmCount=t=>dealers.filter(d=>ASSIGN[d.name].team===t&&!ASSIGN[d.name].excluded).length;
- let shown=dealers.filter(d=>d.name.toLowerCase().includes(mSearch.toLowerCase()));if(mUntagOnly)shown=shown.filter(d=>!ASSIGN[d.name].excluded&&!ASSIGN[d.name].team);
+ let shown=dealers.filter(d=>d.name.toLowerCase().includes(mSearch.toLowerCase()));if(mTeamF==="__UNTAG__")shown=shown.filter(d=>!ASSIGN[d.name].excluded&&!ASSIGN[d.name].team);else if(mTeamF==="__EXC__")shown=shown.filter(d=>ASSIGN[d.name].excluded);else if(mTeamF)shown=shown.filter(d=>ASSIGN[d.name].team===mTeamF&&!ASSIGN[d.name].excluded);
  body.innerHTML=`${untag?`<div class="callout"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg></div><div class="txt"><strong>Action needed — ${untag} dealers awaiting a team member</strong><span>Tag them below so their sales roll up correctly.</span></div></div>`:""}
   <div class="mgrid"><div class="card"><div class="head"><h3>Team members</h3></div><div class="addrow"><input id="tmname" placeholder="Add team member&hellip;"><button id="tmadd">Add</button></div>
      <div class="tmlist">${TEAM.map(t=>`<div class="tmitem"><input type="color" value="${teamColor(t)}" data-col="${esc(t)}"><span class="nm">${esc(t)}</span><span class="dc">${tmCount(t)}</span><button class="ic" data-edit="${esc(t)}" title="Rename"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button><button class="ic del" data-del="${esc(t)}" title="Remove"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg></button></div>`).join("")||'<div class="tblnote">No team members yet.</div>'}</div></div>
    <div class="card" style="padding:0"><div class="head" style="padding:16px 18px 10px"><h3>Dealer tagging</h3><span class="note">${shown.length} of ${dealers.length} dealers</span></div>
-     <div style="padding:0 18px 12px"><div class="mfilter"><input type="search" id="dsearch" placeholder="Search dealer by name&hellip;" value="${esc(mSearch)}"><label class="chk"><input type="checkbox" id="untagonly" ${mUntagOnly?"checked":""}>Untagged only</label></div></div>
+     <div style="padding:0 18px 12px"><div class="mfilter"><input type="search" id="dsearch" placeholder="Search dealer by name&hellip;" value="${esc(mSearch)}"><select id="mteamf"><option value="">All dealers</option>${TEAM.map(t=>`<option value="${esc(t)}" ${mTeamF===t?"selected":""}>${esc(t)}</option>`).join("")}<option value="__UNTAG__" ${mTeamF==="__UNTAG__"?"selected":""}>&mdash; Untagged</option><option value="__EXC__" ${mTeamF==="__EXC__"?"selected":""}>&mdash; Excluded</option></select></div></div>
      <div class="scroll" style="border:none;border-radius:0;max-height:460px"><table><thead><tr><th>Dealer</th><th class="num">Gross value</th><th style="width:180px">Assign to</th></tr></thead><tbody>
      ${shown.map(d=>{const a=ASSIGN[d.name],cur=a.excluded?"__EXC__":(a.team||"");const opts=`<option value="" ${cur===""?"selected":""}>&mdash; Untagged</option>`+TEAM.map(t=>`<option value="${esc(t)}" ${cur===t?"selected":""}>${esc(t)}</option>`).join("")+`<option value="__EXC__" ${cur==="__EXC__"?"selected":""}>Exclude</option>`;return `<tr><td>${esc(d.name)}</td><td class="num tnum">${inr(d.value)}</td><td><select class="${a.excluded?'exc':''}" data-deal="${esc(d.name)}">${opts}</select></td></tr>`;}).join("")||`<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:24px">No dealers match.</td></tr>`}
      </tbody></table></div></div></div>`;
@@ -429,7 +437,7 @@ function renderMgmt(){const gate=document.getElementById("mgmt-gate"),body=docum
  body.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{const t=b.dataset.del;TEAM=TEAM.filter(x=>x!==t);delete COLOURS[t];Object.values(ASSIGN).forEach(a=>{if(a.team===t)a.team=null;});save();renderMgmt();});
  body.querySelectorAll("[data-deal]").forEach(s=>s.onchange=()=>{const k=s.dataset.deal,v=s.value;ASSIGN[k]=v==="__EXC__"?{team:null,excluded:true}:{team:v||null,excluded:false};save();renderMgmt();});
  const ds=document.getElementById("dsearch");ds.oninput=()=>{mSearch=ds.value;const p=ds.selectionStart;renderMgmt();const n=document.getElementById("dsearch");n.focus();n.setSelectionRange(p,p);};
- document.getElementById("untagonly").onchange=e=>{mUntagOnly=e.target.checked;renderMgmt();};}
+ document.getElementById("mteamf").onchange=e=>{mTeamF=e.target.value;renderMgmt();};}
 function startRename(old,btn){const item=btn.closest(".tmitem"),nm=item.querySelector(".nm"),inp=document.createElement("input");inp.className="nmedit";inp.value=old;nm.replaceWith(inp);inp.focus();inp.select();
  const commit=()=>{const v=inp.value.trim();if(v&&v!==old&&!TEAM.includes(v)){TEAM=TEAM.map(x=>x===old?v:x);COLOURS[v]=COLOURS[old];delete COLOURS[old];Object.values(ASSIGN).forEach(a=>{if(a.team===old)a.team=v;});save();}renderMgmt();};
  inp.onblur=commit;inp.onkeydown=e=>{if(e.key==="Enter")commit();if(e.key==="Escape")renderMgmt();};}
