@@ -1,4 +1,5 @@
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Ten &#215; You Offline Sales</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -36,7 +37,7 @@ h1,h2,h3{margin:0;font-family:"Archivo",system-ui,sans-serif;font-weight:700;let
 .topbar .inner{max-width:1180px;margin:0 auto;padding:11px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
 .brand{display:flex;align-items:baseline;gap:10px;} .mark{font-family:"Archivo",sans-serif;font-weight:800;font-size:16px;} .mark b{color:var(--accent);}
 .crumb{font-size:12.5px;color:var(--muted);border-left:1px solid var(--border);padding-left:10px;}
-.meta{margin-left:auto;font-size:12px;color:var(--ink-soft);text-align:right;} .meta .dot{width:6px;height:6px;border-radius:50%;background:var(--pos);display:inline-block;margin-right:6px;}
+.meta{margin-left:auto;font-size:12px;color:var(--ink-soft);text-align:right;} .erpnow{margin-left:8px;background:none;border:1px solid var(--border);border-radius:7px;color:var(--accent);font-weight:600;font-size:11.5px;padding:2px 8px;cursor:pointer;} .erpnow:disabled{opacity:.6;cursor:wait;} .meta .dot.old{background:var(--warn);} .meta .dot{width:6px;height:6px;border-radius:50%;background:var(--pos);display:inline-block;margin-right:6px;}
 
 .preview{margin:16px 0 0;font-size:12px;color:var(--ink-soft);background:var(--inset);border:1px dashed var(--border);border-radius:10px;padding:8px 12px;} .preview b{color:var(--ink);font-weight:600;}
 .subnav{display:flex;gap:2px;margin:14px 0 0;border-bottom:1px solid var(--border);overflow-x:auto;}
@@ -142,6 +143,117 @@ select{font-family:inherit;font-size:12.5px;color:var(--ink);background:var(--su
 .gatecard button:hover{background:#a93226;}
 .gatecard .gerr{color:var(--neg);font-size:12.5px;margin-top:10px;font-weight:600;}
 .gatecard .gfoot{font-size:11.5px;color:var(--muted);margin-top:18px;border-top:1px solid var(--border-soft);padding-top:14px;}
+
+/* ---------- billing ---------- */
+.navsep{align-self:center;font-family:"Archivo";font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:0 6px 0 16px;margin-left:8px;border-left:1px solid var(--border);white-space:nowrap;}
+.whoami{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-soft);} .whoami b{color:var(--ink);} .whoami button{background:none;border:1px solid var(--border);border-radius:7px;color:var(--accent);font-weight:600;font-size:11.5px;padding:3px 8px;cursor:pointer;}
+.who{position:fixed;inset:0;z-index:90;background:radial-gradient(130% 130% at 50% 0%,#1e4030 0%,#0f231a 58%,#0a1712 100%);display:grid;place-items:center;padding:20px;overflow:auto;}
+.whocard{width:100%;max-width:640px;background:var(--surface);border-radius:20px;box-shadow:0 26px 64px rgba(0,0,0,.4);padding:32px;text-align:center;}
+.whocard .ovr{font-family:"Archivo";font-size:11px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);} .whocard h2{font-size:28px;font-weight:800;margin:4px 0 6px;} .whocard p{font-size:13px;color:var(--ink-soft);margin:0 0 20px;}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;}
+.tile{display:flex;flex-direction:column;align-items:center;gap:6px;padding:16px 10px;border:1px solid var(--border);border-radius:14px;background:var(--surface);cursor:pointer;color:var(--ink);transition:border-color .12s,transform .12s;} .tile:hover{border-color:var(--accent);transform:translateY(-1px);}
+.tile .av{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;color:#fff;font-family:"Archivo";font-weight:700;font-size:15px;} .tile .tn{font-family:"Archivo";font-weight:700;font-size:14px;} .tile .td{font-size:11.5px;color:var(--muted);}
+.tile.be{width:100%;flex-direction:row;justify-content:flex-start;gap:12px;text-align:left;} .tile.be .av{background:var(--ink);} .tile.be .td{margin-left:auto;}
+.whosep{display:flex;align-items:center;gap:10px;margin:16px 0;color:var(--muted);font-size:11.5px;} .whosep:before,.whosep:after{content:"";flex:1;height:1px;background:var(--border);}
+.pinrow{display:flex;gap:8px;margin-top:12px;} .pinrow input{flex:1;font-size:14px;padding:9px 12px;border:1px solid var(--border);border-radius:9px;background:var(--inset);color:var(--ink);}
+.btn{font-family:inherit;font-weight:600;font-size:13px;border-radius:9px;padding:8px 14px;cursor:pointer;border:1px solid var(--border);background:var(--surface);color:var(--ink);white-space:nowrap;display:inline-flex;align-items:center;gap:6px;} .btn:hover{border-color:var(--accent);color:var(--accent);}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;} .btn.primary:hover{background:var(--accent-ink);color:#fff;} .btn.ghost{background:transparent;} .btn.danger:hover{border-color:var(--neg);color:var(--neg);} .btn.sm{font-size:12px;padding:5px 10px;border-radius:8px;} .btn:disabled{opacity:.5;cursor:not-allowed;}
+.lnk{background:none;border:none;color:var(--accent);font-weight:600;font-size:12.5px;cursor:pointer;padding:0;} .lnk:hover{text-decoration:underline;}
+.hbtns{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.ohead{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin:18px 0 14px;} .ohead h2{font-size:20px;} .mut{color:var(--muted);font-size:11.5px;} .ohead .mut{font-size:12.5px;margin-top:2px;}
+.ogrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;} .ogrid3{display:grid;grid-template-columns:1.3fr .8fr 1.2fr;gap:12px;} .ogrid>.card{margin:0;}
+.stepn{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--accent-wash);color:var(--accent-ink);font-size:11.5px;margin-right:8px;vertical-align:1px;}
+.field{display:block;margin-bottom:10px;} .field>span{display:block;font-size:11.5px;font-weight:600;color:var(--ink-soft);margin-bottom:4px;} .field>span i{font-style:normal;font-weight:400;color:var(--muted);} .field .req{color:var(--neg);}
+.field input,.field textarea,.field select{width:100%;font-family:inherit;font-size:13.5px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--inset);color:var(--ink);} .field input:focus,.field textarea:focus,.field select:focus{outline:none;border-color:var(--accent);background:var(--surface);}
+.field.err input,.field.err select{border-color:var(--neg);} .ferr{display:block;font-style:normal;font-size:11.5px;color:var(--neg);min-height:0;} .field input[readonly]{opacity:.7;}
+.dopt{padding:7px 9px;border-radius:7px;cursor:pointer;display:flex;flex-direction:column;} .dopt:hover,.dopt.on{background:var(--inset);} .dopt b{font-size:13px;font-weight:600;} .dopt span{font-size:11.5px;color:var(--muted);}
+.dsum{margin-top:12px;display:grid;gap:6px;} .kv{display:flex;gap:10px;font-size:12.5px;} .kv span{color:var(--muted);min-width:76px;flex:none;} .kv b{font-weight:600;}
+.wbox{background:var(--warn-bg);border:1px solid color-mix(in srgb,var(--warn) 30%,transparent);border-radius:9px;padding:9px 12px;font-size:12.5px;color:var(--ink);} .wtxt{color:var(--warn);} .ptxt{color:var(--pos);font-weight:600;}
+.psearch{position:relative;display:flex;align-items:center;gap:8px;border:1.5px solid var(--border);border-radius:11px;padding:0 12px;background:var(--inset);margin-bottom:12px;color:var(--muted);} .psearch:focus-within{border-color:var(--accent);background:var(--surface);}
+.psearch input{flex:1;border:none;background:none;font-family:inherit;font-size:14px;padding:11px 0;color:var(--ink);outline:none;}
+.presults{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:20;background:var(--surface);border:1px solid var(--border);border-radius:11px;box-shadow:var(--shadow);max-height:360px;overflow:auto;padding:5px;}
+.presults .pr{padding:8px 10px;border-radius:8px;cursor:pointer;color:var(--ink);font-size:13px;} .presults .pr.hi,.presults .pr:hover{background:var(--accent-wash);} .presults .pr.none{cursor:default;color:var(--muted);} .presults .pc{color:var(--ink-soft);}
+.lempty{text-align:center;padding:30px 12px;color:var(--ink-soft);font-size:13px;border:1.5px dashed var(--border);border-radius:11px;}
+.ltbl td{vertical-align:middle;} .ltbl .pcell{min-width:170px;white-space:normal;} .ltbl input{font-family:inherit;}
+.szs{display:flex;flex-wrap:wrap;gap:5px;}
+.sz{display:flex;flex-direction:column;align-items:center;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--surface);} .sz span{font-size:10.5px;font-weight:600;color:var(--muted);background:var(--inset);width:100%;text-align:center;padding:1px 0;font-family:"Archivo";}
+.sz input{width:46px;border:none;text-align:center;font-size:13.5px;padding:5px 2px;background:transparent;color:var(--ink);font-variant-numeric:tabular-nums;} .sz input:focus{outline:none;background:var(--accent-wash);} .sz.has{border-color:var(--accent);} .sz.has span{background:var(--accent-wash);color:var(--accent-ink);}
+.pin{display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:8px;padding:0 8px;background:var(--surface);} .pin span{color:var(--muted);font-size:12.5px;} .pin input{width:78px;border:none;background:none;text-align:right;font-size:13.5px;padding:6px 0 6px 4px;color:var(--ink);font-variant-numeric:tabular-nums;} .pin input:focus{outline:none;} .pin:focus-within{border-color:var(--accent);} .pin input.miss::placeholder{color:var(--neg);} .pin:has(input.miss){border-color:var(--neg);}
+.rm{background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;line-height:1;padding:2px 6px;border-radius:6px;} .rm:hover{color:var(--neg);background:var(--inset);} .rm:disabled{opacity:.3;cursor:default;}
+.badbox{border:1px solid color-mix(in srgb,var(--warn) 35%,transparent);background:var(--warn-bg);border-radius:11px;padding:10px 12px;margin-bottom:12px;} .badbox .bh{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:8px;font-size:13px;} .badbox .bh .lnk{margin-left:auto;}
+.badbox table{background:var(--surface);border-radius:8px;} .badbox input{font-size:12.5px;padding:4px 7px;border:1px solid var(--border);border-radius:6px;background:var(--inset);color:var(--ink);width:100%;min-width:60px;} .badbox .bs{min-width:140px;}
+.savebar{position:sticky;bottom:12px;z-index:15;display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:11px 14px;box-shadow:0 8px 28px rgba(20,37,44,.14);} .stot{font-size:13.5px;}
+.bulkbar{position:sticky;bottom:12px;z-index:15;display:flex;align-items:center;gap:12px;margin-top:14px;background:var(--ink);color:var(--bg);border-radius:14px;padding:11px 14px;box-shadow:0 8px 28px rgba(0,0,0,.2);} .bulkbar .mut{color:color-mix(in srgb,var(--bg) 70%,transparent);} .bulkbar .btn.ghost{color:var(--bg);border-color:color-mix(in srgb,var(--bg) 35%,transparent);}
+.fseg{flex-wrap:wrap;} .fseg button{display:inline-flex;gap:6px;align-items:center;} .fseg .fc{font-size:10.5px;color:var(--muted);background:var(--inset);border-radius:10px;padding:0 6px;}
+.otbl td{vertical-align:top;} .otbl .dcell{white-space:normal;min-width:150px;} .otbl tr.orow{cursor:pointer;} .ck{width:34px;} .ck input{accent-color:var(--accent);width:15px;height:15px;} .acts{text-align:right;}
+.fill{width:72px;height:6px;border-radius:4px;background:var(--surface-2);overflow:hidden;margin:6px 0 3px;} .fill span{display:block;height:100%;background:var(--pos);border-radius:4px;} .fill.big{width:100%;height:9px;margin-top:8px;}
+.stg{display:inline-block;font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:20px;white-space:nowrap;}
+.s-draft{background:var(--surface-2);color:var(--ink-soft);} .s-tobill{background:var(--warn-bg);color:var(--warn);} .s-sheet{background:var(--accent-wash);color:var(--accent-ink);} .s-linked{background:var(--warn-bg);color:var(--neg);}
+.s-partial{background:color-mix(in srgb,#7a5cb0 16%,transparent);color:#7a5cb0;} .s-billed{background:color-mix(in srgb,var(--pos) 16%,transparent);color:var(--pos);} .s-closed{background:var(--surface-2);color:var(--muted);} .s-cancel{background:var(--surface-2);color:var(--muted);text-decoration:line-through;}
+.erpid{display:inline-block;font-size:11.5px;font-weight:600;background:var(--inset);border:1px solid var(--border);border-radius:6px;padding:0 6px;margin:1px 0;} .erpid.bad{color:var(--neg);border-color:var(--neg);}
+.bempty{text-align:center;color:var(--muted);padding:40px 16px;font-size:13px;} .spin{width:18px;height:18px;border-radius:50%;border:2px solid var(--border);border-top-color:var(--accent);animation:sp .8s linear infinite;margin:0 auto 10px;} @keyframes sp{to{transform:rotate(360deg)}}
+.modal .box.wide{max-width:1000px;max-height:88vh;} .modal .box{max-height:88vh;} .mbody{overflow:auto;padding:16px 18px;} .mbody h4{font-family:"Archivo";font-size:13px;margin:18px 0 8px;}
+.meta3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px 16px;} .meta3 .kv{flex-direction:column;gap:1px;} .meta3 .kv span{min-width:0;font-size:11px;}
+.prog{display:flex;gap:12px;flex-wrap:wrap;margin-top:14px;background:var(--inset);border-radius:11px;padding:12px 14px;} .prog>div{flex:1;min-width:90px;display:flex;flex-direction:column;} .prog span{font-size:11px;color:var(--muted);} .prog b{font-family:"Archivo";font-size:20px;} .prog i{font-style:normal;font-size:11.5px;color:var(--ink-soft);}
+.ncell{white-space:normal;min-width:200px;font-size:12px;} .evts{font-size:12.5px;display:flex;flex-direction:column;gap:4px;}
+.duprow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-top:1px solid color-mix(in srgb,var(--warn) 25%,transparent);margin-top:6px;}
+.whl{display:flex;flex-direction:column;gap:6px;} .whr{display:flex;gap:6px;align-items:center;} .whr input[data-wc],.whr input[data-wl]{flex:1;min-width:0;font-size:13px;padding:6px 9px;border:1px solid var(--border);border-radius:7px;background:var(--inset);color:var(--ink);} .whr input[data-wc]{flex:.7;}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:120;background:var(--ink);color:var(--bg);font-size:13px;font-weight:500;padding:10px 16px;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.25);max-width:min(560px,92vw);} .toast.err{background:var(--neg);color:#fff;} .toast.ok{background:var(--pos);color:#fff;} .toast.warn{background:var(--warn);color:#fff;}
+@media (max-width:860px){ .ogrid,.ogrid3,.meta3{grid-template-columns:1fr;} .tile.be .td{display:none;} }
+@media (max-width:640px){ .wrap{padding:0 16px 64px;} .topbar .inner{padding:10px 16px;} #olines .scroll{border:none;} #olines table,#olines tbody,#olines tr,#olines td{display:block;width:100%;} #olines thead{display:none;}
+ #olines tr{position:relative;border:1px solid var(--border);border-radius:11px;padding:8px 6px;margin-bottom:8px;} #olines td{border:none;padding:4px 6px;text-align:left;white-space:normal;} #olines td.num{display:inline-block;width:auto;text-align:left;}
+ #olines td:last-child{position:absolute;top:4px;right:2px;width:auto;} .savebar .stot{width:100%;} .ohead h2{font-size:18px;} .kpis.k4{grid-template-columns:1fr 1fr;} }
+.modetiles{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.mtile{display:flex;flex-direction:column;align-items:flex-start;gap:8px;text-align:left;padding:20px 18px;border:1px solid var(--border);border-radius:16px;background:var(--surface);cursor:pointer;color:var(--ink);transition:border-color .12s,transform .12s;} .mtile:hover{border-color:var(--accent);transform:translateY(-1px);}
+.mtile .mi{width:44px;height:44px;border-radius:12px;background:var(--accent-wash);color:var(--accent);display:grid;place-items:center;} .mtile .tn{font-family:"Archivo";font-weight:800;font-size:17px;} .mtile .td{font-size:12.5px;color:var(--ink-soft);line-height:1.45;}
+.whoami .modeseg{display:inline-flex;gap:2px;background:var(--surface-2);border-radius:9px;padding:3px;} .whoami .modeseg button{border:none;background:none;color:var(--ink-soft);font-size:12px;padding:4px 11px;border-radius:7px;} .whoami .modeseg button.on{background:var(--surface);color:var(--ink);box-shadow:var(--shadow);}
+.bksub{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0 2px;} .bksub button{font-family:inherit;font-size:12.5px;font-weight:600;color:var(--ink-soft);background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:6px 13px;cursor:pointer;} .bksub button.on{background:var(--ink);border-color:var(--ink);color:var(--bg);} .bksub .bdg{display:inline-block;min-width:17px;margin-left:6px;padding:0 5px;border-radius:9px;background:var(--warn);color:#fff;font-size:10.5px;line-height:17px;text-align:center;}
+.obrow{display:grid;grid-template-columns:minmax(0,1fr) 110px 92px;gap:10px;align-items:center;padding:8px 4px;border-bottom:1px solid var(--border-soft);cursor:pointer;font-size:12.5px;} .obrow:hover{background:var(--surface-2);} .obrow:last-child{border-bottom:none;} .obrow .mut{font-size:11.5px;}
+.ovbox{background:var(--accent-wash);border-radius:9px;padding:8px 12px;font-size:12.5px;color:var(--ink);margin-bottom:8px;} .s-erp{background:var(--surface-2);color:var(--ink-soft);}
+.via{display:block;font-size:11px;color:var(--muted);margin-top:2px;}
+.kpis.k5{grid-template-columns:repeat(5,minmax(0,1fr));} .kpis.k5 .kpi{min-width:0;} .kpis.k5 .big{font-size:clamp(18px,2.1vw,26px);} .recon{font-size:11.5px;color:var(--muted);margin:-6px 0 14px;text-align:right;}
+.obar{margin:4px 0 14px;} .obar .dates input{font-size:12.5px;padding:4px 8px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--ink);} .obar .range-note{font-size:12px;color:var(--muted);}
+.shipcard{border:1px solid var(--border);border-radius:11px;padding:10px 12px 4px;margin:0 0 10px;background:var(--surface-2);} .shiph{display:flex;align-items:center;gap:10px;margin-bottom:6px;font-size:12.5px;} .shiph .lnk{margin-left:auto;}
+.intlchk{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 12px;padding:9px 12px;border:1px dashed var(--border);border-radius:9px;font-size:12.5px;}
+.psearch.padd{margin:12px 0 0;} .psearch.padd input{border-style:dashed;}
+.shipsel{flex:1;min-width:0;font-size:12.5px;font-weight:600;padding:5px 8px;border:1px solid var(--border);border-radius:7px;background:var(--inset);color:var(--ink);}
+@media (max-width:1000px){ .kpis.k5{grid-template-columns:repeat(3,1fr);} } @media (max-width:640px){ .kpis.k5{grid-template-columns:1fr 1fr;} .recon{text-align:left;} }
+/* avatars */
+.av.avs,.av.avi{border-radius:50%;flex:none;overflow:hidden;} .av.avs{display:inline-block;padding:0;} .av.avs svg{display:block;width:100%;height:100%;}
+.av.avi{display:inline-grid;place-items:center;color:#fff;font-family:"Archivo";font-weight:700;}
+.av.dgav{border-radius:50%;display:inline-grid;place-items:center;flex:none;background:linear-gradient(135deg,#1f7a4d,#0f4c81);}
+.tile .av.avs,.tile .av.avi{box-shadow:0 0 0 3px var(--surface),0 0 0 4px var(--border);} .tile:hover .av.avs,.tile:hover .av.avi{box-shadow:0 0 0 3px var(--surface),0 0 0 5px var(--accent);}
+.tile.be+.tile.be{margin-top:8px;} .tile.dg .av{background:linear-gradient(135deg,#1f7a4d,#0f4c81);}
+.avbtn,.mebadge{border:none;background:none;padding:0;cursor:pointer;border-radius:50%;line-height:0;flex:none;} .avbtn:hover .av,.mebadge:hover .av{box-shadow:0 0 0 2px var(--accent);}
+.whoami .mebadge{border:none!important;padding:0!important;}
+.avgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:10px;}
+.avopt{display:flex;flex-direction:column;align-items:center;gap:7px;padding:12px 6px;border:1.5px solid var(--border);border-radius:13px;background:var(--surface);color:var(--ink);cursor:pointer;font-size:12.5px;font-weight:600;} .avopt:hover{border-color:var(--accent);} .avopt.on{border-color:var(--accent);background:var(--accent-wash);box-shadow:0 0 0 2px var(--accent);}
+/* tables: resize / sort / columns */
+table.gt{table-layout:fixed;min-width:100%;} table.gt th,table.gt td{overflow:hidden;text-overflow:ellipsis;} table.gt td.wrapc{white-space:normal;}
+table.gt th{position:sticky;padding-right:18px;} table.gt th.nosrt{cursor:default;} table.gt th .sa{font-style:normal;margin-left:5px;opacity:.35;font-size:9.5px;} table.gt th.on .sa{opacity:1;color:var(--accent);} table.gt th.on{color:var(--ink);}
+table.gt th .rz{position:absolute;top:0;right:0;width:7px;height:100%;cursor:col-resize;z-index:2;} table.gt th .rz:hover{background:color-mix(in srgb,var(--accent) 35%,transparent);}
+body.rzing,body.rzing *{cursor:col-resize!important;user-select:none!important;}
+.colpick{min-width:0;} .colpick .msmenu{top:36px;left:auto;right:0;width:270px;}
+.fpick{min-width:190px;max-width:280px;} .fpick .msbtn{font-family:inherit;font-size:12.5px;padding:6px 10px;border-radius:8px;font-weight:600;} .fpick .msbtn .lbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;} .fpick .msbtn.set{border-color:var(--accent);color:var(--accent);} .fpick .msmenu{top:36px;}
+.fpick .msmenu input{width:100%;margin-bottom:6px;font-size:12.5px;padding:6px 9px;border:1px solid var(--border);border-radius:7px;background:var(--inset);color:var(--ink);}
+/* review before placing */
+.szsum{display:flex;flex-wrap:wrap;gap:4px;} .szsum span{font-size:11.5px;background:var(--inset);border-radius:6px;padding:2px 7px;white-space:nowrap;}
+.lockbox{display:flex;gap:12px;align-items:flex-start;margin-top:16px;padding:12px 14px;border-radius:11px;background:var(--warn-bg);border:1px solid color-mix(in srgb,var(--warn) 32%,transparent);font-size:13px;line-height:1.5;} .lockbox .lk{font-size:20px;line-height:1;}
+/* cancellation reason */
+.cxbox{border:1px solid color-mix(in srgb,var(--neg) 30%,transparent);background:color-mix(in srgb,var(--neg) 7%,var(--surface));border-radius:11px;padding:11px 14px;margin-bottom:14px;font-size:12.5px;}
+.cxh{font-family:"Archivo";font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--neg);} .cxr{font-size:14.5px;font-weight:600;margin:3px 0 2px;color:var(--ink);}
+/* the Dugout scoreboard */
+.podh{font-family:"Archivo";font-weight:700;font-size:13px;margin:4px 0 8px;}
+.podium{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:14px;}
+.pod{position:relative;display:flex;flex-direction:column;align-items:center;gap:5px;padding:16px 10px 14px;border:1px solid var(--border);border-radius:var(--r);background:var(--surface);box-shadow:var(--shadow);cursor:pointer;color:var(--ink);text-align:center;} .pod:hover{border-color:var(--accent);}
+.pod.p1{background:linear-gradient(180deg,color-mix(in srgb,#e8b931 16%,var(--surface)),var(--surface));} .pod .medal{position:absolute;top:8px;left:10px;font-size:22px;}
+.pod .pn{font-family:"Archivo";font-weight:800;font-size:15px;} .pod .pv{font-family:"Archivo";font-weight:800;font-size:20px;color:var(--accent);} .pod .pv i{font-style:normal;font-size:11.5px;color:var(--muted);font-weight:600;} .pod .mut{font-size:11.5px;}
+.tmcell{display:inline-flex;align-items:center;gap:9px;}
+.mix{display:flex;height:9px;border-radius:5px;overflow:hidden;background:var(--inset);margin-top:4px;} .mix span{display:block;height:100%;} .mix .b,.mix-key .b{background:var(--pos);} .mix .p,.mix-key .p{background:var(--warn);} .mix .c,.mix-key .c{background:#96a4ab;}
+.mix-key{margin-left:8px;white-space:nowrap;} .mix-key i{display:inline-block;width:9px;height:9px;border-radius:2px;margin:0 3px 0 8px;vertical-align:-1px;}
+@media (max-width:640px){ .podium{grid-template-columns:1fr;} .fpick{max-width:none;flex:1;} }
+.tmstat{display:flex;gap:10px;font-size:11.5px;color:var(--muted);margin-left:auto;margin-right:6px;white-space:nowrap;}
+@media (max-width:640px){ .modetiles{grid-template-columns:1fr;} .whoami{width:100%;flex-wrap:wrap;} .obrow{grid-template-columns:minmax(0,1fr) 84px;} .obrow .obfill{display:none;} }
 </style>
 
 <div id="gate" class="gate">
@@ -159,11 +271,13 @@ select{font-family:inherit;font-size:12.5px;color:var(--ink);background:var(--su
 
 <header class="topbar"><div class="inner">
   <div class="brand"><span class="mark">Ten <b>&#215;</b> You</span><span class="crumb">Offline Sales</span></div>
-  <div class="meta"><span><span class="dot"></span><span id="refreshed">Loading&hellip;</span></span><br><span style="color:var(--muted)">Auto-refresh every hour</span></div>
+  <div class="meta"><span><span class="dot" id="erpdot"></span><span id="refreshed">Loading&hellip;</span></span><button id="erpnow" class="erpnow" title="Pull the latest from ERP now, for everyone">&#8635; Refresh now</button><br><span style="color:var(--muted)">ERP auto-refresh every 2 hours</span></div>
+  <div class="whoami" id="whoami" hidden></div>
 </div></header>
+<div id="who" class="who" hidden></div>
 
 <div class="wrap">
-  <div class="preview"><b>Demo.</b> Team-member tags &amp; colours are sample data (set in Management). Figures are live from ERP &#8212; B2B sales orders, cancelled excluded, <b>net of returns</b>. <b>Data available from July 2026 onwards.</b></div>
+  <div class="preview" id="salesnote">Sales figures are live from ERP &#8212; B2B sales orders, cancelled excluded, <b>net of returns</b>. <b>Data available from July 2026 onwards.</b> Team members &amp; dealer tags are shared for everyone.</div>
   <nav class="subnav" id="subnav"></nav>
   <div class="periodbar" id="periodbar" hidden><span class="lbl">Period</span><div class="pctl" id="gperiod"></div><span class="range-note" id="rangenote"></span></div>
 
@@ -173,7 +287,7 @@ select{font-family:inherit;font-size:12.5px;color:var(--ink);background:var(--su
     <div class="kpis k2" id="ov-kpis"></div>
     <figure class="card"><div class="head"><h3>Month-on-month performance</h3><span class="note">net sales &#183; <select id="mfrom"></select> to <select id="mto"></select></span></div><div id="ov-month"></div><div style="margin-top:10px" id="ov-growth"></div></figure>
     <div class="lensgrid" style="margin-top:14px">
-      <figure class="card" style="margin:0"><div class="head"><h3>Team member performance</h3><div class="pctl" id="ovt-period"></div></div><div class="bars" id="ovt-bars"></div></figure>
+      <figure class="card" style="margin:0" id="ovt-card"><div class="head"><h3>Team member performance</h3><div class="pctl" id="ovt-period"></div></div><div class="bars" id="ovt-bars"></div></figure>
       <figure class="card" style="margin:0"><div class="head"><h3>Product split</h3><div class="pctl" id="ovp-period"></div></div><div id="ovp-pie"></div></figure>
     </div>
     <figure class="card" style="margin-top:14px"><div class="head"><h3>Under picking &#8212; by dealer</h3><span class="note">live snapshot &#183; current orders under picking (not tied to the period)</span></div><div id="ov-uppie"></div></figure>
@@ -189,21 +303,44 @@ select{font-family:inherit;font-size:12.5px;color:var(--ink);background:var(--su
   <div class="section" data-sec="lens" hidden>
     <div class="lensbar"><span class="wlbl">Dealer</span><div id="lens-ms"></div><span class="wlbl" style="margin-left:8px">Period</span><div class="pctl" id="lens-period"></div><span class="range-note" id="lens-range"></span></div>
     <div class="lenswidgets" id="lens-kpis"></div>
+    <div class="card" style="margin-bottom:14px"><div class="head"><h3>Billed orders</h3><span class="note" id="lens-onote">ERP sales orders in the selected period</span></div><div class="scroll" id="lens-orders"></div></div>
     <div class="lensgrid">
       <div class="card"><div class="head"><h3>Product split</h3><span class="note">net value</span></div><div id="lens-pie"></div></div>
       <div class="card"><div class="head"><h3>Month-on-month</h3><span class="note">net billed</span></div><div id="lens-month"></div></div>
     </div>
   </div>
 
-  <div class="section" data-sec="mgmt" hidden><div id="mgmt-gate"></div><div id="mgmt-body" hidden></div></div>
+  <div class="section" data-sec="mgmt" hidden><div id="mgmt-body"></div></div>
+  <div class="bksub" id="bksub" hidden></div>
+  <div class="section" data-sec="bk-team" hidden><div id="bk-team"></div></div>
+  <div class="section" data-sec="bk-tag" hidden><div id="bk-tag"></div></div>
+  <div class="section" data-sec="bk-settings" hidden><div id="mgmt-settings"></div></div>
+  <div class="section" data-sec="b-new" hidden><div id="b-new"></div></div>
+  <div class="section" data-sec="b-orders" hidden><div id="b-orders"></div></div>
+  <div class="section" data-sec="b-desk" hidden><div id="b-desk"></div></div>
+  <div class="section" data-sec="b-dealers" hidden><div id="b-dealers"></div></div>
+  <div class="section" data-sec="b-score" hidden><div id="b-score"></div></div>
 </div>
 <div id="modal-root"></div>
+<script src="billing.js?v=20261002172004"></script>
 <script>
-let DATA=null;
-const LS=(k,d)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d;}catch(e){return d;}};
-const LSset=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}};
-let TEAM,COLOURS,ASSIGN,TODAY,MONTH_START,YEAR_MIN;
-function initData(){TEAM=LS("txy_team3",[...DATA.teamMembers]);COLOURS=LS("txy_colours3",{...DATA.teamColors});ASSIGN=LS("txy_assign3",Object.fromEntries(DATA.dealers.map(d=>[d.name,{team:d.team,excluded:d.excluded}])));DATA.dealers.forEach(d=>{if(!ASSIGN[d.name])ASSIGN[d.name]={team:d.team,excluded:d.excluded};});TODAY=DATA.today;MONTH_START=TODAY.slice(0,7)+"-01";YEAR_MIN=DATA.minDate;setRefreshed();}
+let DATA=null,BOOT=null;
+let TEAM,COLOURS,ASSIGN,TEAMID,TODAY,MONTH_START,YEAR_MIN;
+/* Team members + dealer tags come from the shared billing database (BOOT), not the browser. */
+function initData(){
+ const act=BOOT.team.filter(t=>t.active);TEAM=act.map(t=>t.name);TEAMID=Object.fromEntries(act.map(t=>[t.name,t.id]));
+ COLOURS=Object.fromEntries(BOOT.team.map(t=>[t.name,t.colour||"#96a4ab"]));
+ const tname=id=>{const t=act.find(x=>x.id===id);return t?t.name:null;},tag=Object.fromEntries(BOOT.dealers.map(d=>[d.name,d]));
+ /* A dealer tagged in Billing is tagged here automatically: same name, the same name with an ERP suffix (" - 3"),
+    or the ERP customer on an order linked in Billing. Changing it in Management sets it explicitly. */
+ const nn=x=>String(x||"").toLowerCase().replace(/[-\s]+(billing|shipping)?[-\s]*\d+$/,"").replace(/[^a-z0-9]/g,"");
+ const byId=Object.fromEntries(BOOT.dealers.map(d=>[d.id,d])),auto={};
+ BOOT.dealers.forEach(d=>{if(d.source==="app"&&d.team_id)auto[nn(d.name)]=d;});
+ (BOOT.erp_alias||[]).forEach(([c,id])=>{const d=byId[id];if(d&&d.team_id&&!auto[nn(c)])auto[nn(c)]=d;});
+ const known=new Set(DATA.dealers.map(d=>d.name));BOOT.dealers.forEach(d=>{if(!known.has(d.name)&&d.source==="app")DATA.dealers.push({name:d.name,team:null,excluded:false,value:0});});
+ ASSIGN={};DATA.dealers.forEach(d=>{let t=tag[d.name],via=null;if(!t&&!d.excluded){t=auto[nn(d.name)];if(t)via=t.name;}
+  ASSIGN[d.name]=t?{team:t.excluded?null:tname(t.team_id),excluded:!!t.excluded,via}:{team:null,excluded:!!d.excluded};});
+ TODAY=DATA.today;MONTH_START=TODAY.slice(0,7)+"-01";YEAR_MIN=DATA.minDate;setRefreshed();}
 let tab="overview", PPAL=["#0e6e86","#4e63a6","#9a5e7f","#3f8a6e","#b4722f","#7a5cb0","#2f8fb4","#a34d5e","#6b8f2f","#c06a4a"];
 
 const RS="₹";
@@ -217,8 +354,10 @@ const monLabel=m=>MON[+m.slice(5,7)-1]+" "+m.slice(0,4);
 const esc=s=>String(s).replace(/[<>&"]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;"}[c]));
 const teamColor=t=>COLOURS[t]||"#96a4ab";
 const teamOf=k=>{const a=ASSIGN[k];if(!a)return null;if(a.excluded)return false;return a.team||null;};
-const offDealers=()=>DATA.dealers.filter(d=>!ASSIGN[d.name].excluded);
-const baseLines=()=>DATA.lines.filter(l=>teamOf(l.k)!==false);
+/* Dashboard: no name needed, everyone sees every (non-excluded) dealer. */
+const inScope=k=>teamOf(k)!==false;
+const offDealers=()=>DATA.dealers.filter(d=>ASSIGN[d.name]&&inScope(d.name));
+const baseLines=()=>DATA.lines.filter(l=>inScope(l.k));
 function upMap(){if(!DATA._up)DATA._up=Object.fromEntries((DATA.underpick||[]).map(u=>[u.k,u]));return DATA._up;}
 function upVal(r){if(!r||!r.dealers)return 0;const u=upMap();let s=0;r.dealers.forEach(d=>{if(u[d])s+=u[d].v||0;});return s;}
 
@@ -235,7 +374,7 @@ function makePeriod(host,st,cb){
  upd();
 }
 let GP={mode:"MTD"},gFrom=MONTH_START,gTo=TODAY;
-const linesIn=(f,t)=>DATA.lines.filter(l=>l.d>=f&&l.d<=t&&teamOf(l.k)!==false);
+const linesIn=(f,t)=>DATA.lines.filter(l=>l.d>=f&&l.d<=t&&inScope(l.k));
 const periodLines=()=>linesIn(gFrom,gTo);
 
 const DIMS={
@@ -373,16 +512,21 @@ function pieInto(elId,items,tot){if(!items.length||tot<=0){document.getElementBy
 function productItems(lines){const pm=new Map();for(const l of lines)pm.set(l.p,(pm.get(l.p)||0)+l.a);let items=[...pm.entries()].map(([k,v])=>({k,v})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v);const tot=items.reduce((s,x)=>s+x.v,0);if(items.length>7){const top=items.slice(0,7),o=items.slice(7).reduce((s,x)=>s+x.v,0);top.push({k:"Other",v:o});items=top;}return[items,tot];}
 
 let ovtP={mode:"MTD"},ovpP={mode:"MTD"};
-function renderOverview(){const lines=periodLines(),net=lines.reduce((s,l)=>s+l.a,0),dealers=new Set(lines.map(l=>l.k)),untag=DATA.dealers.filter(d=>!d.excluded&&!ASSIGN[d.name].team).length;
+function renderOverview(){const lines=periodLines(),net=lines.reduce((s,l)=>s+l.a,0),dealers=new Set(lines.map(l=>l.k)),untag=DATA.dealers.filter(d=>!ASSIGN[d.name].excluded&&!ASSIGN[d.name].team).length;
  document.getElementById("ov-callout").textContent=`Action needed — ${untag} dealers awaiting a team member`;
- document.getElementById("ov-kpis").innerHTML=[{c:"hero",l:"Net offline sales",big:cr(net),sub:`${shortDate(gFrom)} – ${shortDate(gTo)}`},{l:"Active dealers",big:dealers.size,sub:"unique dealers billed in period"}].map(k=>`<div class="kpi ${k.c||''}"><div class="lab">${k.l}</div><div class="big tnum">${k.big}</div><div class="sub tnum">${k.sub}</div></div>`).join("");
- renderMonthChart();renderUnderpickPie();}
+ document.getElementById("ov-callout").closest(".callout").hidden=!untag;
+ const kp=[{c:"hero",l:"Net offline sales",big:cr(net),sub:`${shortDate(gFrom)} – ${shortDate(gTo)}`},{l:"Active dealers",big:dealers.size,sub:"unique dealers billed in period"}];
+ document.getElementById("ov-kpis").innerHTML=kp.map(k=>`<div class="kpi ${k.c||''}" ${k.id?`id="${k.id}"`:""}><div class="lab">${k.l}</div><div class="big tnum">${k.big}</div><div class="sub tnum">${k.sub}</div></div>`).join("");
+ renderMonthChart();renderUnderpickPie();
+}
 function renderUnderpickPie(){const u=upMap();let items=offDealers().map(d=>({k:d.name,v:(u[d.name]?u[d.name].v:0)})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v);const tot=items.reduce((s,x)=>s+x.v,0);if(items.length>7){const top=items.slice(0,7),o=items.slice(7).reduce((s,x)=>s+x.v,0);items=top.concat([{k:"Other",v:o}]);}
  if(!items.length){document.getElementById("ov-uppie").innerHTML='<div class="tblnote" style="padding:22px 0;text-align:center">No offline orders are under picking right now &#8212; this fills in live as soon as one is.</div>';return;}
  pieInto("ov-uppie",items,tot);}
-function renderMonthChart(){const all=DATA.monthly.map(x=>x.m),fs=document.getElementById("mfrom"),ts=document.getElementById("mto");
- if(!fs.options.length){all.forEach(m=>{fs.add(new Option(monLabel(m),m));ts.add(new Option(monLabel(m),m));});fs.value=all[0];ts.value=all[all.length-1];fs.onchange=ts.onchange=renderMonthChart;}
- let ms=DATA.monthly.filter(x=>x.m>=fs.value&&x.m<=ts.value);if(!ms.length)ms=DATA.monthly;monthBars("ov-month",ms,720,250);
+function monthlySeries(){const mm=new Map();baseLines().forEach(l=>{const m=l.d.slice(0,7);mm.set(m,(mm.get(m)||0)+l.a);});return [...mm.keys()].sort().map(m=>({m,v:Math.round(mm.get(m))}));}
+function renderMonthChart(){const series=monthlySeries(),all=series.map(x=>x.m),fs=document.getElementById("mfrom"),ts=document.getElementById("mto");
+ if(fs._sig!==all.join()){fs._sig=all.join();fs.innerHTML=ts.innerHTML="";all.forEach(m=>{fs.add(new Option(monLabel(m),m));ts.add(new Option(monLabel(m),m));});fs.value=all[0]||"";ts.value=all[all.length-1]||"";fs.onchange=ts.onchange=renderMonthChart;}
+ if(!series.length){document.getElementById("ov-month").innerHTML='<div class="tblnote" style="padding:30px 0;text-align:center">No sales yet.</div>';document.getElementById("ov-growth").innerHTML="";return;}
+ let ms=series.filter(x=>x.m>=fs.value&&x.m<=ts.value);if(!ms.length)ms=series;monthBars("ov-month",ms,720,250);
  let ch=[];for(let i=1;i<ms.length;i++)if(ms[i-1].v>0)ch.push(ms[i].v/ms[i-1].v-1);
  const g=document.getElementById("ov-growth");
  if(ch.length){const avg=ch.reduce((a,b)=>a+b,0)/ch.length*100,up=avg>=0;g.innerHTML=`<span class="growth ${up?'up':'down'}">${up?'▲':'▼'} ${Math.abs(avg).toFixed(1)}% avg growth / month</span> <span style="font-size:11.5px;color:var(--muted)">across ${ms.length} months (${monLabel(ms[0].m)} – ${monLabel(ms[ms.length-1].m)})</span>`;}else g.innerHTML="";}
@@ -398,7 +542,8 @@ let LENS={sel:[]},lensP={mode:"MTD"},lensFrom=MONTH_START,lensTo=TODAY;
 function initLensPeriod(){makePeriod(document.getElementById("lens-period"),lensP,(f,t)=>{lensFrom=f;lensTo=t;renderLens();});}
 function openLens(name){LENS.sel=[name];lensP={mode:GP.mode,from:gFrom,to:gTo};show("lens");initLensPeriod();renderLensMS();}
 function renderLensMS(){const host=document.getElementById("lens-ms"),all=offDealers().map(d=>d.name).sort((a,b)=>a.localeCompare(b));
- if(!LENS.sel.length)LENS.sel=[offDealers().sort((a,b)=>b.value-a.value)[0].name];
+ LENS.sel=LENS.sel.filter(n=>all.includes(n));
+ if(!LENS.sel.length&&all.length)LENS.sel=[offDealers().sort((a,b)=>b.value-a.value)[0].name];
  const label=LENS.sel.length===1?LENS.sel[0]:LENS.sel.length+" dealers combined";
  host.innerHTML=`<div class="ms"><button class="msbtn" id="msbtn"><span>${esc(label)}</span><span class="car">&#9662;</span></button><div class="msmenu" id="msmenu" hidden><input type="search" id="mssearch" placeholder="Search dealers&hellip;"><div class="msopts" id="msopts"></div><div class="msfoot"><button id="msclear">Clear</button><span style="color:var(--muted)">${LENS.sel.length} selected</span></div></div></div>`;
  const menu=host.querySelector("#msmenu"),search=host.querySelector("#mssearch"),opts=host.querySelector("#msopts");
@@ -409,60 +554,164 @@ function renderLensMS(){const host=document.getElementById("lens-ms"),all=offDea
  host.querySelector("#msclear").onclick=()=>{LENS.sel=[];paint(search.value);host.querySelector(".msbtn span").textContent="Select dealers";renderLens();};
  renderLens();}
 function renderLens(){document.getElementById("lens-range").textContent=`${shortDate(lensFrom)} – ${shortDate(lensTo)}`;
- const sel=LENS.sel,lines=DATA.lines.filter(l=>sel.includes(l.k)&&l.d>=lensFrom&&l.d<=lensTo);
+ const sel=LENS.sel,lines=DATA.lines.filter(l=>sel.includes(l.k)&&inScope(l.k)&&l.d>=lensFrom&&l.d<=lensTo);
+ renderLensOrders();
  const net=lines.reduce((s,l)=>s+l.a,0),units=lines.reduce((s,l)=>s+l.q,0),orderDates=new Set(lines.filter(l=>!l.r).map(l=>l.d)).size,ret=lines.filter(l=>l.r).reduce((s,l)=>s+l.a,0);
  document.getElementById("lens-kpis").innerHTML=[{l:"Orders placed",big:orderDates,sub:"unique billing dates"},{l:"Net billed",big:lakh(net),sub:inr(net)},{l:"Units billed",big:Math.round(units).toLocaleString("en-IN"),sub:"net of returns"},{l:"Returns",big:ret?lakh(ret):RS+"0",sub:"in period"}].map(k=>`<div class="kpi"><div class="lab">${k.l}</div><div class="big tnum">${k.big}</div><div class="sub tnum">${k.sub}</div></div>`).join("");
  const[items,tot]=productItems(lines);pieInto("lens-pie",items,tot);
  const mm=new Map();for(const l of lines)mm.set(l.d.slice(0,7),(mm.get(l.d.slice(0,7))||0)+l.a);const ms=[...mm.keys()].sort().map(m=>({m,v:mm.get(m)}));
  if(ms.length>1)monthBars("lens-month",ms,560,230);else document.getElementById("lens-month").innerHTML=`<div class="tblnote" style="padding:24px 0;text-align:center">Selected range covers one month &#8212; widen the period to see a trend.</div>`;}
 
-/* management */
-let mgmtUnlocked=true,mSearch="",mTeamF="";
-function renderMgmt(){const gate=document.getElementById("mgmt-gate"),body=document.getElementById("mgmt-body");
- if(!mgmtUnlocked){body.hidden=true;gate.hidden=false;gate.innerHTML=`<div class="mgmt-lock"><div class="ic"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></div><h3>Management is protected</h3><p>Enter the team password to manage members and dealer tagging.</p><input type="password" id="pw" placeholder="Password"><button id="pwbtn">Unlock</button><div class="hint">Demo password: <b>tenxyou</b> &middot; real password set before deploy</div></div>`;
-  const go=()=>{if(document.getElementById("pw").value.trim().toLowerCase()==="tenxyou"){mgmtUnlocked=true;renderMgmt();}else document.getElementById("pw").style.borderColor="var(--neg)";};document.getElementById("pwbtn").onclick=go;document.getElementById("pw").onkeydown=e=>{if(e.key==="Enter")go();};return;}
- gate.hidden=true;body.hidden=false;const dealers=[...DATA.dealers].sort((a,b)=>b.value-a.value),untag=dealers.filter(d=>!ASSIGN[d.name].excluded&&!ASSIGN[d.name].team).length,tmCount=t=>dealers.filter(d=>ASSIGN[d.name].team===t&&!ASSIGN[d.name].excluded).length;
+/* billed orders = ERP B2B sales orders (from the sales data), for the selected dealers and period */
+function renderLensOrders(){const host=document.getElementById("lens-orders"),sel=new Set(LENS.sel),m=new Map();
+ DATA.lines.forEach(l=>{if(l.r||!l.o||!sel.has(l.k)||l.d<lensFrom||l.d>lensTo)return;let o=m.get(l.o);if(!o){o={so:l.o,n:l.n,d:l.d,k:l.k,q:0,a:0};m.set(l.o,o);}o.q+=l.q;o.a+=l.a;});
+ const list=[...m.values()].sort((a,b)=>b.d.localeCompare(a.d)||b.so.localeCompare(a.so));
+ if(!list.length){host.innerHTML='<div class="tblnote" style="padding:16px 4px">No billed orders for the selected dealer'+(sel.size===1?"":"s")+' in this period.</div>';return;}
+ const u=n=>Math.round(n).toLocaleString("en-IN"),q=list.reduce((s,o)=>s+o.q,0),a=list.reduce((s,o)=>s+o.a,0);
+ host.innerHTML=`<table><thead><tr><th>Order ID</th><th>ERP sales order</th><th>Date</th>${sel.size>1?"<th>Dealer</th>":""}<th class="num">Units</th><th class="num">Value</th></tr></thead><tbody>${list.map(o=>`<tr><td><b>${esc(o.n||"—")}</b></td><td class="mut">${esc(o.so)}</td><td class="tnum">${shortDate(o.d)}</td>${sel.size>1?`<td>${esc(o.k)}</td>`:""}<td class="num tnum">${u(o.q)}</td><td class="num tnum">${inr(o.a)}</td></tr>`).join("")}</tbody>
+  <tfoot><tr><td>Total</td><td colspan="${sel.size>1?3:2}" class="mut" style="font-weight:500">${list.length} order${list.length===1?"":"s"}</td><td class="num tnum">${u(q)}</td><td class="num tnum">${inr(a)}</td></tr></tfoot></table>`;}
+
+/* ---------- Billing → Backend: sales team + dealer tagging (shared database) ---------- */
+let mSearch="",mTeamF="",mSel=new Set();
+const tmCount=t=>DATA.dealers.filter(d=>ASSIGN[d.name].team===t&&!ASSIGN[d.name].excluded).length;
+const untagCount=()=>DATA.dealers.filter(d=>!ASSIGN[d.name].excluded&&!ASSIGN[d.name].team).length;
+function renderTeamMgmt(){const host=document.getElementById("bk-team"),oc={},pv={};
+ (BILL.orders()||[]).forEach(o=>{if(o.stage==="draft"||o.stage==="cancelled"||!o.team)return;oc[o.team]=(oc[o.team]||0)+1;if(BILL.ACTION.includes(o.stage))pv[o.team]=(pv[o.team]||0)+o.tot.pv;});
+ if(!BILL.orders())BILL.getOrders().then(()=>{if(tab==="bk-team")renderTeamMgmt();}).catch(()=>{});
+ host.innerHTML=`<div class="ohead"><div><h2>Sales team</h2><div class="mut">Everyone added here gets a tile on the sign-in screen and sees only the dealers tagged to them &#8212; in Billing and in the Sales dashboard.</div></div></div>
+  <div class="card" style="max-width:760px"><div class="addrow"><input id="tmname" placeholder="New sales person&rsquo;s name&hellip;"><button id="tmadd">+ Add sales person</button></div>
+   <div class="tmlist">${TEAM.map(t=>`<div class="tmitem"><button class="avbtn" data-av="${esc(t)}" title="Change avatar">${BILL.avatar(TEAMID[t],30)}</button><input type="color" value="${teamColor(t)}" data-col="${esc(t)}" title="Colour on charts"><span class="nm">${esc(t)}</span><span class="tmstat"><span>${oc[t]||0} orders</span><span>${pv[t]?lakh(pv[t])+" pending":""}</span></span><button class="lnk" data-tagof="${esc(t)}" title="Show their dealers">${tmCount(t)} dealer${tmCount(t)===1?"":"s"}</button><button class="ic" data-edit="${esc(t)}" title="Rename"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button><button class="ic del" data-del="${esc(t)}" title="Remove"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg></button></div>`).join("")||'<div class="tblnote">No sales people yet &#8212; add the first one above.</div>'}</div>
+   <div class="tblnote">Removing someone untags their dealers (their orders stay). Rename keeps all tags and orders.</div></div>`;
+ const tmAdd=()=>{const v=document.getElementById("tmname").value.trim();if(!v)return;if(TEAM.includes(v)){showToast(v+" already exists");return;}mgmtCall("team_save",{name:v,colour:PPAL[TEAM.length%PPAL.length]},v+" added");};
+ document.getElementById("tmadd").onclick=tmAdd;document.getElementById("tmname").onkeydown=e=>{if(e.key==="Enter")tmAdd();};
+ host.querySelectorAll("[data-col]").forEach(c=>{c.oninput=()=>{COLOURS[c.dataset.col]=c.value;};c.onchange=()=>mgmtCall("team_save",{id:TEAMID[c.dataset.col],colour:c.value});});
+ host.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>startRename(b.dataset.edit,b));
+ host.querySelectorAll("[data-av]").forEach(b=>b.onclick=()=>BILL.pickAvatar(TEAMID[b.dataset.av],refresh));
+ host.querySelectorAll("[data-tagof]").forEach(b=>b.onclick=()=>{mTeamF=b.dataset.tagof;mSel.clear();show("bk-tag");});
+ host.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{const t=b.dataset.del;if(confirm("Remove "+t+"? Their "+tmCount(t)+" dealers become untagged."))mgmtCall("team_delete",{id:TEAMID[t]},t+" removed");});}
+function renderTagMgmt(){const host=document.getElementById("bk-tag"),dealers=[...DATA.dealers].sort((a,b)=>b.value-a.value),untag=untagCount();
  let shown=dealers.filter(d=>d.name.toLowerCase().includes(mSearch.toLowerCase()));if(mTeamF==="__UNTAG__")shown=shown.filter(d=>!ASSIGN[d.name].excluded&&!ASSIGN[d.name].team);else if(mTeamF==="__EXC__")shown=shown.filter(d=>ASSIGN[d.name].excluded);else if(mTeamF)shown=shown.filter(d=>ASSIGN[d.name].team===mTeamF&&!ASSIGN[d.name].excluded);
+ [...mSel].forEach(n=>{if(!shown.some(d=>d.name===n))mSel.delete(n);});
+ const opts=cur=>`<option value="" ${cur===""?"selected":""}>&mdash; Untagged</option>`+TEAM.map(t=>`<option value="${esc(t)}" ${cur===t?"selected":""}>${esc(t)}</option>`).join("")+`<option value="__EXC__" ${cur==="__EXC__"?"selected":""}>Exclude (not offline)</option>`;
+ host.innerHTML=`<div class="ohead"><div><h2>Dealer tagging</h2><div class="mut">Which sales person owns each dealer. It decides what they see in Billing and whose numbers it counts in on the dashboard. Excluded dealers drop out of every number.</div></div></div>
+  ${untag?`<div class="callout"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg></div><div class="txt"><strong>Action needed — ${untag} dealers awaiting a sales person</strong><span>Untagged dealers count in the backend totals only. <button class="lnk" data-showuntag>Show them</button></span></div></div>`:""}
+  <div class="card" style="padding:0"><div style="padding:14px 18px 12px"><div class="mfilter"><input type="search" id="dsearch" placeholder="Search dealer by name&hellip;" value="${esc(mSearch)}"><select id="mteamf"><option value="">All dealers</option>${TEAM.map(t=>`<option value="${esc(t)}" ${mTeamF===t?"selected":""}>${esc(t)} (${tmCount(t)})</option>`).join("")}<option value="__UNTAG__" ${mTeamF==="__UNTAG__"?"selected":""}>&mdash; Untagged (${untag})</option><option value="__EXC__" ${mTeamF==="__EXC__"?"selected":""}>&mdash; Excluded</option></select><span class="mut" style="font-size:12px;margin-left:auto">${shown.length} of ${dealers.length} dealers</span></div></div>
+   <div class="scroll" style="border:none;border-radius:0;max-height:560px"><table><thead><tr><th class="ck"><input type="checkbox" id="tagall" ${shown.length&&shown.every(d=>mSel.has(d.name))?"checked":""} title="Select all shown"></th><th>Dealer</th><th class="num">Net sales (all time)</th><th style="width:210px">Sales person</th></tr></thead><tbody>
+   ${shown.map(d=>{const a=ASSIGN[d.name],cur=a.excluded?"__EXC__":(a.team||"");return `<tr><td class="ck"><input type="checkbox" data-pick="${esc(d.name)}" ${mSel.has(d.name)?"checked":""}></td><td>${esc(d.name)}</td><td class="num tnum">${inr(d.value)}</td><td><select class="${a.excluded?'exc':''}" data-deal="${esc(d.name)}">${opts(cur)}</select></td></tr>`;}).join("")||`<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:24px">No dealers match.</td></tr>`}
+   </tbody></table></div></div>
+  ${mSel.size?`<div class="bulkbar"><b>${mSel.size} dealer${mSel.size===1?"":"s"} selected</b><div class="spacer"></div><span class="mut">Move to</span><select id="bulkto">${opts("")}</select><button class="btn ghost sm" id="bulkclr">Clear</button><button class="btn primary" id="bulkgo">Apply &#8594;</button></div>`:""}`;
+ const tagBody=v=>({team_id:v&&v!=="__EXC__"?TEAMID[v]:null,excluded:v==="__EXC__"});
+ const lab=v=>v==="__EXC__"?"excluded":v?"tagged to "+v:"untagged";
+ host.querySelectorAll("[data-deal]").forEach(sel=>sel.onchange=()=>{const k=sel.dataset.deal,v=sel.value;mgmtCall("dealer_tag",Object.assign({name:k},tagBody(v)),k+" "+lab(v));});
+ host.querySelectorAll("[data-pick]").forEach(c=>c.onchange=()=>{if(c.checked)mSel.add(c.dataset.pick);else mSel.delete(c.dataset.pick);renderTagMgmt();});
+ const ta=document.getElementById("tagall");ta.onchange=()=>{shown.forEach(d=>ta.checked?mSel.add(d.name):mSel.delete(d.name));renderTagMgmt();};
+ const su=host.querySelector("[data-showuntag]");if(su)su.onclick=()=>{mTeamF="__UNTAG__";renderTagMgmt();};
+ const bg=document.getElementById("bulkgo");if(bg)bg.onclick=()=>{const v=document.getElementById("bulkto").value,n=mSel.size;if(!confirm(`Mark ${n} dealer${n===1?"":"s"} as ${lab(v)}?`))return;const names=[...mSel];mSel.clear();mgmtCall("dealer_tag",Object.assign({names},tagBody(v)),n+" dealer"+(n===1?"":"s")+" "+lab(v));};
+ const bc=document.getElementById("bulkclr");if(bc)bc.onclick=()=>{mSel.clear();renderTagMgmt();};
+ const ds=document.getElementById("dsearch");ds.oninput=()=>{mSearch=ds.value;const p=ds.selectionStart;renderTagMgmt();const n=document.getElementById("dsearch");n.focus();n.setSelectionRange(p,p);};
+ document.getElementById("mteamf").onchange=e=>{mTeamF=e.target.value;mSel.clear();renderTagMgmt();};}
+async function mgmtCall(a,body,msg){try{await BILL.api(a,body);await BILL.reloadBoot();BILL.invalidate();if(msg)showToast(msg);}catch(e){alert(e.message);}paintBkSub();refresh();}
+function showToast(m){const t=document.getElementById("toast");if(!t){const d=document.createElement("div");d.id="toast";document.body.appendChild(d);}const el=document.getElementById("toast");el.className="toast ok";el.textContent=m;el.hidden=false;clearTimeout(el._h);el._h=setTimeout(()=>el.hidden=true,2600);}
+function startRename(old,btn){const item=btn.closest(".tmitem"),nm=item.querySelector(".nm"),inp=document.createElement("input");inp.className="nmedit";inp.value=old;nm.replaceWith(inp);inp.focus();inp.select();
+ let done=false;const commit=()=>{if(done)return;done=true;const v=inp.value.trim();if(v&&v!==old&&!TEAM.includes(v))mgmtCall("team_save",{id:TEAMID[old],name:v},"Renamed to "+v);else refresh();};
+ inp.onblur=commit;inp.onkeydown=e=>{if(e.key==="Enter")commit();if(e.key==="Escape"){done=true;refresh();}};}
+
+/* ---------- Management (Sales dashboard) — team members + dealer tagging, same shared data as Billing ---------- */
+let gSearch="",gTeamF="";
+function renderMgmt(){const body=document.getElementById("mgmt-body");const dealers=[...DATA.dealers].sort((a,b)=>b.value-a.value),untag=untagCount();
+ let shown=dealers.filter(d=>d.name.toLowerCase().includes(gSearch.toLowerCase()));if(gTeamF==="__UNTAG__")shown=shown.filter(d=>!ASSIGN[d.name].excluded&&!ASSIGN[d.name].team);else if(gTeamF==="__EXC__")shown=shown.filter(d=>ASSIGN[d.name].excluded);else if(gTeamF)shown=shown.filter(d=>ASSIGN[d.name].team===gTeamF&&!ASSIGN[d.name].excluded);
  body.innerHTML=`${untag?`<div class="callout"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg></div><div class="txt"><strong>Action needed — ${untag} dealers awaiting a team member</strong><span>Tag them below so their sales roll up correctly.</span></div></div>`:""}
   <div class="mgrid"><div class="card"><div class="head"><h3>Team members</h3></div><div class="addrow"><input id="tmname" placeholder="Add team member&hellip;"><button id="tmadd">Add</button></div>
-     <div class="tmlist">${TEAM.map(t=>`<div class="tmitem"><input type="color" value="${teamColor(t)}" data-col="${esc(t)}"><span class="nm">${esc(t)}</span><span class="dc">${tmCount(t)}</span><button class="ic" data-edit="${esc(t)}" title="Rename"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button><button class="ic del" data-del="${esc(t)}" title="Remove"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg></button></div>`).join("")||'<div class="tblnote">No team members yet.</div>'}</div></div>
+     <div class="tmlist">${TEAM.map(t=>`<div class="tmitem"><button class="avbtn" data-av="${esc(t)}" title="Change avatar">${BILL.avatar(TEAMID[t],30)}</button><input type="color" value="${teamColor(t)}" data-col="${esc(t)}" title="Colour"><span class="nm">${esc(t)}</span><span class="dc">${tmCount(t)}</span><button class="ic" data-edit="${esc(t)}" title="Rename"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button><button class="ic del" data-del="${esc(t)}" title="Remove"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg></button></div>`).join("")||'<div class="tblnote">No team members yet.</div>'}</div></div>
    <div class="card" style="padding:0"><div class="head" style="padding:16px 18px 10px"><h3>Dealer tagging</h3><span class="note">${shown.length} of ${dealers.length} dealers</span></div>
-     <div style="padding:0 18px 12px"><div class="mfilter"><input type="search" id="dsearch" placeholder="Search dealer by name&hellip;" value="${esc(mSearch)}"><select id="mteamf"><option value="">All dealers</option>${TEAM.map(t=>`<option value="${esc(t)}" ${mTeamF===t?"selected":""}>${esc(t)}</option>`).join("")}<option value="__UNTAG__" ${mTeamF==="__UNTAG__"?"selected":""}>&mdash; Untagged</option><option value="__EXC__" ${mTeamF==="__EXC__"?"selected":""}>&mdash; Excluded</option></select></div></div>
+     <div style="padding:0 18px 12px"><div class="mfilter"><input type="search" id="gsearch" placeholder="Search dealer by name&hellip;" value="${esc(gSearch)}"><select id="gteamf"><option value="">All dealers</option>${TEAM.map(t=>`<option value="${esc(t)}" ${gTeamF===t?"selected":""}>${esc(t)}</option>`).join("")}<option value="__UNTAG__" ${gTeamF==="__UNTAG__"?"selected":""}>&mdash; Untagged</option><option value="__EXC__" ${gTeamF==="__EXC__"?"selected":""}>&mdash; Excluded</option></select></div></div>
      <div class="scroll" style="border:none;border-radius:0;max-height:460px"><table><thead><tr><th>Dealer</th><th class="num">Gross value</th><th style="width:180px">Assign to</th></tr></thead><tbody>
-     ${shown.map(d=>{const a=ASSIGN[d.name],cur=a.excluded?"__EXC__":(a.team||"");const opts=`<option value="" ${cur===""?"selected":""}>&mdash; Untagged</option>`+TEAM.map(t=>`<option value="${esc(t)}" ${cur===t?"selected":""}>${esc(t)}</option>`).join("")+`<option value="__EXC__" ${cur==="__EXC__"?"selected":""}>Exclude</option>`;return `<tr><td>${esc(d.name)}</td><td class="num tnum">${inr(d.value)}</td><td><select class="${a.excluded?'exc':''}" data-deal="${esc(d.name)}">${opts}</select></td></tr>`;}).join("")||`<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:24px">No dealers match.</td></tr>`}
+     ${shown.map(d=>{const a=ASSIGN[d.name],cur=a.excluded?"__EXC__":(a.team||"");const opts=`<option value="" ${cur===""?"selected":""}>&mdash; Untagged</option>`+TEAM.map(t=>`<option value="${esc(t)}" ${cur===t?"selected":""}>${esc(t)}</option>`).join("")+`<option value="__EXC__" ${cur==="__EXC__"?"selected":""}>Exclude</option>`;return `<tr><td>${esc(d.name)}${a.via?`<span class="via">auto-tagged from Billing${a.via!==d.name?" (dealer "+esc(a.via)+")":""}</span>`:""}</td><td class="num tnum">${inr(d.value)}</td><td><select class="${a.excluded?'exc':''}" data-deal="${esc(d.name)}">${opts}</select></td></tr>`;}).join("")||`<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:24px">No dealers match.</td></tr>`}
      </tbody></table></div></div></div>`;
- document.getElementById("tmadd").onclick=()=>{const v=document.getElementById("tmname").value.trim();if(v&&!TEAM.includes(v)){TEAM.push(v);COLOURS[v]=DATA.palette[(TEAM.length-1)%DATA.palette.length];save();renderMgmt();}};
- body.querySelectorAll("[data-col]").forEach(c=>c.oninput=()=>{COLOURS[c.dataset.col]=c.value;save();});
+ const tmAdd=()=>{const v=document.getElementById("tmname").value.trim();if(v&&!TEAM.includes(v))mgmtCall("team_save",{name:v,colour:PPAL[TEAM.length%PPAL.length]},v+" added");};
+ document.getElementById("tmadd").onclick=tmAdd;document.getElementById("tmname").onkeydown=e=>{if(e.key==="Enter")tmAdd();};
+ body.querySelectorAll("[data-col]").forEach(c=>{c.oninput=()=>{COLOURS[c.dataset.col]=c.value;};c.onchange=()=>mgmtCall("team_save",{id:TEAMID[c.dataset.col],colour:c.value});});
  body.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>startRename(b.dataset.edit,b));
- body.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{const t=b.dataset.del;TEAM=TEAM.filter(x=>x!==t);delete COLOURS[t];Object.values(ASSIGN).forEach(a=>{if(a.team===t)a.team=null;});save();renderMgmt();});
- body.querySelectorAll("[data-deal]").forEach(s=>s.onchange=()=>{const k=s.dataset.deal,v=s.value;ASSIGN[k]=v==="__EXC__"?{team:null,excluded:true}:{team:v||null,excluded:false};save();renderMgmt();});
- const ds=document.getElementById("dsearch");ds.oninput=()=>{mSearch=ds.value;const p=ds.selectionStart;renderMgmt();const n=document.getElementById("dsearch");n.focus();n.setSelectionRange(p,p);};
- document.getElementById("mteamf").onchange=e=>{mTeamF=e.target.value;renderMgmt();};}
-function startRename(old,btn){const item=btn.closest(".tmitem"),nm=item.querySelector(".nm"),inp=document.createElement("input");inp.className="nmedit";inp.value=old;nm.replaceWith(inp);inp.focus();inp.select();
- const commit=()=>{const v=inp.value.trim();if(v&&v!==old&&!TEAM.includes(v)){TEAM=TEAM.map(x=>x===old?v:x);COLOURS[v]=COLOURS[old];delete COLOURS[old];Object.values(ASSIGN).forEach(a=>{if(a.team===old)a.team=v;});save();}renderMgmt();};
- inp.onblur=commit;inp.onkeydown=e=>{if(e.key==="Enter")commit();if(e.key==="Escape")renderMgmt();};}
-function save(){LSset("txy_team3",TEAM);LSset("txy_colours3",COLOURS);LSset("txy_assign3",ASSIGN);}
+ body.querySelectorAll("[data-av]").forEach(b=>b.onclick=()=>BILL.pickAvatar(TEAMID[b.dataset.av],refresh));
+ body.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{const t=b.dataset.del;if(confirm("Remove "+t+"? Their dealers become untagged."))mgmtCall("team_delete",{id:TEAMID[t]},t+" removed");});
+ body.querySelectorAll("[data-deal]").forEach(x=>x.onchange=()=>{const k=x.dataset.deal,v=x.value;mgmtCall("dealer_tag",{name:k,team_id:v&&v!=="__EXC__"?TEAMID[v]:null,excluded:v==="__EXC__"});});
+ const gs=document.getElementById("gsearch");gs.oninput=()=>{gSearch=gs.value;const q=gs.selectionStart;renderMgmt();const n=document.getElementById("gsearch");n.focus();n.setSelectionRange(q,q);};
+ document.getElementById("gteamf").onchange=e=>{gTeamF=e.target.value;renderMgmt();};}
 
-const SECS=[["overview","Overview"],["team","Team members"],["dealers","Dealers"],["products","Products"],["lens","Dealer Lens"],["mgmt","Management"]];
-document.getElementById("subnav").innerHTML=SECS.map((s,i)=>`<button class="sub ${i==0?'active':''}" data-go="${s[0]}">${s[1]}${s[2]?'<svg class="lk" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>':''}</button>`).join("");
-function show(id){tab=id;document.querySelectorAll(".sub").forEach(x=>x.classList.toggle("active",x.dataset.go===id));document.querySelectorAll(".section").forEach(s=>s.hidden=s.dataset.sec!==id);document.getElementById("periodbar").hidden=(id==="mgmt"||id==="lens");refresh();}
-function refresh(){if(tab==="overview")renderOverview();else if(tab==="team"){renderTeamBars();renderPivot("team");}else if(tab==="dealers")renderPivot("dealers");else if(tab==="products")renderPivot("products");else if(tab==="lens")renderLens();else if(tab==="mgmt")renderMgmt();}
-document.querySelectorAll(".sub").forEach(b=>b.onclick=()=>show(b.dataset.go));
+/* ---------- navigation: two modes (Billing / Sales dashboard), role-aware ---------- */
+const PERIOD_SECS=["overview","team","dealers","products"];
+const BK_SECS=[["b-desk","Billing desk"],["bk-team","Sales team"],["bk-tag","Dealer tagging"],["bk-settings","Billing sheet settings"]];
+const BK_IDS=BK_SECS.map(x=>x[0]);
+let MODE="billing";
+function navSecs(){const be=BILL.isBackend();
+ if(MODE==="billing"&&BILL.isMgr())return{tabs:[["b-score","Scoreboard"],["b-orders","Team orders"],["b-dealers","Team dealers"]],home:"b-score"};
+ if(MODE==="dash")return{tabs:[["overview","Overview"],["team","Team members"],["dealers","Dealers"],["products","Products"],["lens","Dealer Lens"],["mgmt","Management"]],home:"overview"};
+ return be?{tabs:[["b-new","New order"],["b-orders","All orders"],["b-dealers","All dealers"],["b-desk","Backend"]],home:"b-desk"}
+  :{tabs:[["b-new","New order"],["b-orders","My orders"],["b-dealers","My dealers"]],home:"b-orders"};}
+const modeOf=id=>id.startsWith("b-")||id.startsWith("bk-")?"billing":"dash";
+/* Billing needs a name; the dashboard doesn't. */
+function goMode(m,id){if(m==="billing"&&!BILL.whoValid()){BILL.renderWho(()=>{setMode("billing");show(id||navSecs().home);});return;}setMode(m);show(id||navSecs().home);}
+function buildNav(){const n=navSecs(),btn=s=>`<button class="sub" data-go="${s[0]}">${s[1]}</button>`;
+ document.getElementById("subnav").innerHTML=n.tabs.map(btn).join("");
+ document.querySelectorAll("#subnav .sub").forEach(b=>b.onclick=()=>show(b.dataset.go==="b-desk"&&BK_IDS.includes(tab)?tab:b.dataset.go));
+ const w=document.getElementById("whoami");w.hidden=false;
+ w.innerHTML=`<div class="modeseg"><button data-mode="billing" class="${MODE==="billing"?"on":""}">Billing</button><button data-mode="dash" class="${MODE==="dash"?"on":""}">Sales dashboard</button></div>`+(MODE==="billing"?`${BILL.meBadge()}<span>Signed in as <b>${esc(BILL.whoLabel())}</b></span><button id="swuser">Switch</button>`:"");
+ w.querySelectorAll("[data-mode]").forEach(b=>b.onclick=()=>{if(b.dataset.mode!==MODE)goMode(b.dataset.mode);});
+ const sw=document.getElementById("swuser");if(sw)sw.onclick=()=>BILL.switchUser(enterApp);
+ const ma=document.getElementById("meav");if(ma)ma.onclick=()=>BILL.pickAvatar(BILL.meId(),()=>{buildNav();refresh();});}
+function setMode(m){MODE=m;BILL.setMode(m);buildNav();}
+function paintBkSub(){const el=document.getElementById("bksub");el.hidden=!BK_IDS.includes(tab);if(el.hidden)return;const u=untagCount();
+ el.innerHTML=BK_SECS.map(s=>`<button data-bk="${s[0]}" class="${s[0]===tab?"on":""}">${s[1]}${s[0]==="bk-tag"&&u?`<span class="bdg">${u}</span>`:""}</button>`).join("");
+ el.querySelectorAll("[data-bk]").forEach(b=>b.onclick=()=>show(b.dataset.bk));}
+function show(id){if(modeOf(id)!==MODE){if(modeOf(id)==="billing"&&!BILL.whoValid()){goMode("billing",id);return;}setMode(modeOf(id));}tab=id;const navId=BK_IDS.includes(id)?"b-desk":id;
+ document.querySelectorAll("#subnav .sub").forEach(x=>x.classList.toggle("active",x.dataset.go===navId));document.querySelectorAll(".section").forEach(s=>s.hidden=s.dataset.sec!==id);
+ document.getElementById("periodbar").hidden=!PERIOD_SECS.includes(id);document.getElementById("salesnote").hidden=MODE!=="dash";paintBkSub();refresh();window.scrollTo(0,0);}
+function refresh(){if(tab==="mgmt"){renderMgmt();return;}if(tab==="overview")renderOverview();else if(tab==="team"){renderTeamBars();renderPivot("team");}else if(tab==="dealers")renderPivot("dealers");else if(tab==="products")renderPivot("products");else if(tab==="lens")renderLens();
+ else if(tab==="bk-team")renderTeamMgmt();else if(tab==="bk-tag")renderTagMgmt();else if(tab==="bk-settings")BILL.renderSettings(document.getElementById("mgmt-settings"));else if(tab.startsWith("b-"))BILL.render(tab);}
 
-function setRefreshed(){var el=document.getElementById("refreshed");if(el&&DATA&&DATA.generatedAt){try{el.textContent="Last refreshed "+new Date(DATA.generatedAt).toLocaleString("en-IN",{day:"numeric",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});}catch(e){el.textContent="Last refreshed "+DATA.generatedAt;}}}
+function setRefreshed(){var el=document.getElementById("refreshed");if(!el||!DATA)return;const dot=document.getElementById("erpdot");if(!DATA.generatedAt){el.textContent="ERP data unavailable";dot&&dot.classList.add("old");return;}
+ const t=new Date(DATA.generatedAt);dot&&dot.classList.toggle("old",Date.now()-t>2.5*3600e3);
+ try{el.textContent="ERP last refreshed "+t.toLocaleString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});}catch(e){el.textContent="ERP last refreshed "+DATA.generatedAt;}}
+const loadSales=()=>BILL.api("sales");
+/* new ERP snapshot in hand → redraw whatever is on screen */
+async function applySales(d){const b=await BILL.api("boot");BOOT=b;DATA=d&&!d.error?d:emptyData();initData();BILL.invalidate();if(booted)refresh();}
+async function erpNow(){const btn=document.getElementById("erpnow");btn.disabled=true;btn.textContent="Refreshing…";
+ try{await BILL.api("erp_refresh",{});await applySales(await loadSales());BILL.toast("ERP data refreshed for everyone","ok");}
+ catch(e){BILL.toast(e.message,"err");}
+ btn.disabled=false;btn.innerHTML="&#8635; Refresh now";}
+document.getElementById("erpnow").onclick=erpNow;
+/* an open tab picks up the 2-hourly refresh on its own */
+setInterval(()=>{if(!DATA||!booted)return;const age=DATA.generatedAt?Date.now()-new Date(DATA.generatedAt):1e12;setRefreshed();
+ if(age>=2*3600e3)loadSales().then(d=>{if(d.generatedAt!==DATA.generatedAt)applySales(d);}).catch(()=>{});},10*60e3);
 function setRangeNote(){document.getElementById("rangenote").textContent=`${shortDate(gFrom)} – ${shortDate(gTo)}`;}
 document.addEventListener("click",e=>{if(!e.target.closest(".pick"))document.querySelectorAll(".pickmenu").forEach(m=>m.hidden=true);if(!e.target.closest(".ms"))document.querySelectorAll(".msmenu").forEach(m=>m.hidden=true);});
-function bootApp(){initData();makePeriod(document.getElementById("gperiod"),GP,(f,t)=>{gFrom=f;gTo=t;setRangeNote();refresh();});makePeriod(document.getElementById("ovt-period"),ovtP,(f,t)=>barsInto("ovt-bars",teamPairs(linesIn(f,t))));makePeriod(document.getElementById("ovp-period"),ovpP,(f,t)=>{const[items,tot]=productItems(linesIn(f,t));pieInto("ovp-pie",items,tot);});initLensPeriod();["team","dealers","products"].forEach(toolbar);renderLensMS();setRangeNote();show("overview");}
-async function loadData(){try{const r=await fetch("/api/data",{cache:"no-store"});if(!r.ok)throw new Error("HTTP "+r.status);DATA=await r.json();bootApp();}catch(err){var w=document.querySelector(".wrap");if(w)w.insertAdjacentHTML("beforeend",'<div class="card" style="margin-top:16px;text-align:center"><b style="color:var(--neg)">Could not load live data.</b><br><span style="color:var(--ink-soft);font-size:12.5px">Please refresh in a moment.</span></div>');}}
-loadData();
+let booted=false;
+function bootApp(){initData();makePeriod(document.getElementById("gperiod"),GP,(f,t)=>{gFrom=f;gTo=t;setRangeNote();refresh();});makePeriod(document.getElementById("ovt-period"),ovtP,(f,t)=>barsInto("ovt-bars",teamPairs(linesIn(f,t))));makePeriod(document.getElementById("ovp-period"),ovpP,(f,t)=>{const[items,tot]=productItems(linesIn(f,t));pieInto("ovp-pie",items,tot);});initLensPeriod();["team","dealers","products"].forEach(toolbar);renderLensMS();setRangeNote();booted=true;}
+function enterApp(){BILL.resetForUser();LENS.sel=[];mSel.clear();mTeamF="";MODE=BILL.mode()||"dash";BILL.setMode(MODE);if(!booted){tab="overview";bootApp();}buildNav();show(navSecs().home);renderLensMS();BILL.loadItems().catch(()=>{});}
+function emptyData(){const t=new Date().toISOString().slice(0,10);return{today:t,generatedAt:null,minDate:"2026-07-01",palette:PPAL,teamMembers:[],teamColors:{},lines:[],dealers:[],monthly:[],underpick:[],netTotal:0};}
+/* Start after the team password is accepted by the server. */
+async function startApp(){
+ const [d,b]=await Promise.allSettled([loadSales(),BILL.api("boot")]);
+ if(b.status!=="fulfilled")throw b.reason;
+ BOOT=b.value;DATA=d.status==="fulfilled"&&!d.value.error?d.value:emptyData();
+ if(!DATA.generatedAt)document.getElementById("salesnote").innerHTML='<b style="color:var(--neg)">Sales data could not load from ERP just now</b> &#8212; billing still works. Refresh in a moment for the sales tabs.';
+ /* entry: Billing vs Sales dashboard (remembered for this browser tab); Billing then asks for the name */
+ const m=BILL.mode(),ok=BILL.whoValid();
+ if(!m)BILL.renderMode(enterApp);else if(m==="billing"&&!ok)BILL.renderWho(enterApp);else enterApp();
+}
 
-/* site password gate — Howzat? */
+/* site password gate — Howzat? (checked by the server) */
 (function(){const g=document.getElementById("gate");if(!g)return;
- const seen=()=>{try{return sessionStorage.getItem("txy_gate")==="1";}catch(e){return false;}};
- function unlock(){g.style.display="none";try{sessionStorage.setItem("txy_gate","1");}catch(e){}}
- if(seen()){unlock();return;}
  const pw=document.getElementById("gpw"),btn=document.getElementById("gbtn"),err=document.getElementById("gerr");
- const go=()=>{const v=pw.value.trim().toLowerCase().replace(/[?\s]/g,"");if(v==="howzat")unlock();else{err.hidden=false;pw.value="";pw.focus();}};
- btn.onclick=go;pw.onkeydown=e=>{if(e.key==="Enter")go();};pw.focus();
+ const setKey=v=>{try{sessionStorage.setItem("txy_key",v);}catch(e){}};
+ const getKey=()=>{try{return sessionStorage.getItem("txy_key")||"";}catch(e){return "";}};
+ let busy=false,passed=false;
+ async function attempt(v,silent){if(busy||passed)return;busy=true;setKey(v);btn.disabled=true;
+  try{await startApp();passed=true;g.style.display="none";}
+  catch(e){setKey("");if(!silent){err.hidden=false;err.textContent=e.status===401?"Not out \u2014 that's not the password. Try again.":"Couldn't reach the server: "+e.message;pw.value="";pw.focus();}}
+  busy=false;btn.disabled=false;}
+ const go=()=>{const v=pw.value.trim();if(v)attempt(v,false);};
+ btn.onclick=go;pw.onkeydown=e=>{if(e.key==="Enter")go();};
+ if(getKey())attempt(getKey(),true);else pw.focus();
 })();
 </script>

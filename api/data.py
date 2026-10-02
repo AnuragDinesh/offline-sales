@@ -58,7 +58,7 @@ def build():
     # 1. All non-cancelled B2B sales-order line items (one joined query)
     so = _query(
         "Sales Order",
-        ["customer", "transaction_date",
+        ["name", "customer", "transaction_date", "custom_saleor_order_no",
          "`tabSales Order Item`.item_code", "`tabSales Order Item`.qty", "`tabSales Order Item`.amount"],
         [["custom_is_b2b", "=", 1], ["transaction_date", ">=", START_DATE], ["status", "!=", "Cancelled"]],
     )
@@ -77,7 +77,8 @@ def build():
         if _is_marketplace(dealer):
             mkt_value[dealer] += r.get("amount") or 0
         else:
-            off_lines.append({"d": r.get("transaction_date"), "r": 0, "k": dealer,
+            off_lines.append({"d": r.get("transaction_date"), "r": 0, "k": dealer, "o": r.get("name"),
+                              "n": str(r.get("custom_saleor_order_no") or ""),
                               "s": r.get("item_code"), "q": r.get("qty") or 0, "a": r.get("amount") or 0})
     for r in dn:
         dealer = _norm(r.get("customer"))
@@ -102,8 +103,11 @@ def build():
     lines = []
     for x in off_lines + ret_lines:
         p, c, z = enrich(x["s"])
-        lines.append({"d": x["d"], "r": x["r"], "k": x["k"], "s": x["s"], "p": p, "c": c, "z": z,
-                      "q": round(x["q"], 2), "a": round(x["a"], 2)})
+        ln = {"d": x["d"], "r": x["r"], "k": x["k"], "s": x["s"], "p": p, "c": c, "z": z,
+              "q": round(x["q"], 2), "a": round(x["a"], 2)}
+        if x.get("o"):
+            ln["o"], ln["n"] = x["o"], x["n"]
+        lines.append(ln)
 
     off_value = collections.defaultdict(float)
     for x in lines:

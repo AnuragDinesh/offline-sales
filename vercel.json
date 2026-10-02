@@ -1,6 +1,32 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
-    "api/data.py": { "maxDuration": 30 }
-  }
+    "api/data.py": {
+      "maxDuration": 30
+    },
+    "api/billing.py": {
+      "maxDuration": 60,
+      "includeFiles": "api/data.py"
+    }
+  },
+  "headers": [
+    {
+      "source": "/(.*)\\.(html|js)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, must-revalidate"
+        }
+      ]
+    }
+  ]
 }
