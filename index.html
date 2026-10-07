@@ -61,7 +61,7 @@ h1,h2,h3{margin:0;font-family:"Archivo",system-ui,sans-serif;font-weight:700;let
 .kpis{display:grid;gap:12px;margin-bottom:14px;} .kpis.k2{grid-template-columns:repeat(2,1fr);} .kpis.k4{grid-template-columns:repeat(4,1fr);}
 .kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:15px 16px;box-shadow:var(--shadow);}
 .kpi .lab{font-size:11.5px;color:var(--muted);font-weight:500;} .kpi .big{font-family:"Archivo",sans-serif;font-weight:700;font-size:25px;line-height:1.12;margin-top:6px;letter-spacing:-.02em;}
-.kpi .sub{font-size:11.5px;color:var(--ink-soft);margin-top:3px;} .kpi.hero .big{color:var(--accent);}
+.kpi .sub{font-size:11.5px;color:var(--ink-soft);margin-top:3px;display:block;padding:0;border:0;white-space:normal;overflow-wrap:anywhere;font-family:inherit;font-weight:400;cursor:auto;} .kpi.hero .big{color:var(--accent);}
 
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:16px 18px;box-shadow:var(--shadow);} .card+.card{margin-top:14px;}
 .card .head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap;} .card .head h3{font-size:14.5px;} .card .head .note{font-size:11.5px;color:var(--muted);}
@@ -322,7 +322,7 @@ body.rzing,body.rzing *{cursor:col-resize!important;user-select:none!important;}
   <div class="section" data-sec="b-score" hidden><div id="b-score"></div></div>
 </div>
 <div id="modal-root"></div>
-<script src="billing.js?v=20261002172004"></script>
+<script src="billing.js?v=20261007212021"></script>
 <script>
 let DATA=null,BOOT=null;
 let TEAM,COLOURS,ASSIGN,TEAMID,TODAY,MONTH_START,YEAR_MIN;

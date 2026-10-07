@@ -288,6 +288,7 @@ async function renderNew() {
   host.innerHTML = `
   <div class="ohead"><div><h2>${editing ? "Edit order " + esc(ORD.ref) : "New order"}</h2><div class="mut">Pick the dealer, add products with sizes &amp; quantities, then submit to billing.</div></div>
     <div class="hbtns">${editing ? '<button class="btn ghost" data-act="discard">Discard changes</button>' : (ordHasContent() ? '<button class="btn ghost" data-act="clear">Start over</button>' : "")}</div></div>
+  ${editing && ORD.sheet_at ? `<div class="lockbox" style="margin-bottom:14px"><span class="lk">&#9888;</span><div><b>The billing sheet for this order was already created${ORD.billed ? ` and ${units(ORD.billed)} units are billed in ERP` : ""}.</b><br><span class="mut">Your changes update ordered and pending quantities here. If ERP needs them too, re-download the billing sheet after saving. Billed quantities still come from ERP.</span></div></div>` : ""}
   <div class="card"><div class="head"><h3><span class="stepn">1</span>Dealer</h3><button class="btn ghost sm" data-act="newdealer">+ New dealer</button></div>
       <div id="dcombo"></div><div id="dsum"></div></div>
   <div class="card" style="margin-top:14px"><div class="head"><h3><span class="stepn">2</span>Products &amp; sizes</h3>
@@ -581,7 +582,7 @@ function submitSummary(go) {
   m.querySelector("#sum-go").onclick = e => { e.target.disabled = true; go(); };
 }
 function editOrder(o) {
-  ORD = blankOrd(); Object.assign(ORD, { id: o.id, ref: o.ref, status: o.status, dealer_id: o.dealer_id, dealer_ov: o.dealer_ov || null, ship_sel: o.ship_sel || null, po_ref: o.po_ref || "", remarks: o.remarks || "" });
+  ORD = blankOrd(); Object.assign(ORD, { id: o.id, ref: o.ref, status: o.status, sheet_at: o.sheet_at || null, billed: o.tot.bq + (o.tot.eq || 0), dealer_id: o.dealer_id, dealer_ov: o.dealer_ov || null, ship_sel: o.ship_sel || null, po_ref: o.po_ref || "", remarks: o.remarks || "" });
   o.lines.forEach(l => { const it = item(l.sku); ORD.lines[it.code] = { qty: l.qty, price: l.price }; if (!ORD.groups.includes(it.gk)) ORD.groups.push(it.gk); });
   closeModal(); show("b-new");
 }
@@ -628,16 +629,16 @@ function orderKpis(base) {
   const placed = base.filter(o => o.stage !== "draft"), canc = placed.filter(o => o.stage === "cancelled");
   const billed = placed.filter(o => o.tot.bq > 0), full = placed.filter(o => o.stage === "billed"), pend = placed.filter(o => o.tot.pq > 0), part = pend.filter(o => o.tot.bq > 0);
   const short = placed.filter(o => o.stage === "closed");
-  const P = sum(placed, "ov"), Bv = sum(placed, "bvo"), Pv = sum(placed, "pv"), Cv = sum(placed, "cv"), den = P - sum(canc, "cv");
+  const P = sum(placed, "ov"), Bv = sum(placed, "bvo"), Ev = sum(placed, "ev"), Eq = sum(placed, "eq"), Pv = sum(placed, "pv"), Cv = sum(placed, "cv"), den = P - sum(canc, "cv");
   const fill = den > 0 ? Bv / den * 100 : 0;
   const tiles = [
     { l: "Orders placed", big: lakh(P), sub: `${n(placed.length, "order")} &#183; ${units(sum(placed, "oq"))} units`, c: "hero" },
-    { l: "Billed", big: lakh(Bv), sub: `${n(billed.length, "order")} (${full.length} fully) &#183; ${units(sum(placed, "bq"))} units` },
+    { l: "Billed", big: lakh(Bv + Ev), sub: `${n(billed.length, "order")} (${full.length} fully) &#183; ${units(sum(placed, "bq") + Eq)} units${Eq ? ` (${units(Eq)} extra*)` : ""}` },
     { l: "Pending to bill", big: lakh(Pv), sub: `${n(pend.length, "order")} (${part.length} partially billed) &#183; ${units(sum(placed, "pq"))} units` },
     { l: "Cancelled / closed", big: lakh(Cv), sub: `${canc.length} cancelled &#183; ${short.length} short-closed &#183; ${units(sum(placed, "cq"))} units` },
     { l: "Fill rate (value)", big: fill.toFixed(0) + "%", sub: "billed &#247; (placed &#8722; cancelled)" }];
   return `<div class="kpis k5">${tiles.map(k => `<div class="kpi ${k.c || ""}"><div class="lab">${k.l}</div><div class="big tnum">${k.big}</div><div class="sub tnum">${k.sub}</div></div>`).join("")}</div>
-   <div class="recon tnum">Placed ${money(P)} = Billed ${money(Bv)} + Pending ${money(Pv)} + Cancelled / closed ${money(Cv)} &#183; values at the order price</div>`;
+   <div class="recon tnum">Placed ${money(P)} = Billed against order ${money(Bv)} + Pending ${money(Pv)} + Cancelled / closed ${money(Cv)} &#183; values at the order price${Ev ? ` &#183; plus ${money(Ev)} billed as extra*` : ""}</div>${Eq ? `<div class="recon">* Extra = units billed in ERP that were not in the original order (substitutions or add-ons).</div>` : ""}`;
 }
 function periodBar(st) {
   const [f, t] = oRange(st);
@@ -674,6 +675,7 @@ const dCity = o => { const d = dealerById(o.dealer_id); return d ? d.bill_city |
 function orderCols(desk, st, allSel) {
   const sum = (L, k) => L.reduce((t, o) => t + (o.tot[k] || 0), 0), pctOf = o => o.tot.ov ? Math.min(100, o.tot.bvo / o.tot.ov * 100) : 0;
   const qv = (q, v, cls) => `<span class="${cls || ""}">${units(q)}</span><div class="mut">${money(v)}</div>`;
+  const bqv = (q, e, v) => `${units(q + e)}${e ? ` <span class="wtxt" title="Units billed in ERP that were not in the original order">(${units(e)} extra*)</span>` : ""}<div class="mut">${money(v)}</div>`;
   const c = [];
   if (desk) c.push({ k: "ck", fixed: true, w: 42, tc: "ck", h: `<input type="checkbox" data-all ${allSel.length && allSel.every(o => st.sel.has(o.id)) ? "checked" : ""} ${allSel.length ? "" : "disabled"} title="Select all without a billing sheet">`, td: o => `<input type="checkbox" data-sel="${o.id}" ${st.sel.has(o.id) ? "checked" : ""} ${o.stage === "tobill" ? "" : "disabled"}>` });
   c.push(
@@ -683,10 +685,10 @@ function orderCols(desk, st, allSel) {
     { k: "city", h: "City", label: "Dealer city", hide: true, w: 120, sv: o => dCity(o).toLowerCase(), td: o => esc(dCity(o)) },
     { k: "team", h: "Team member", w: 150, sv: o => o.team || "~", td: o => o.team ? `<span class="pill tagged"><span class="sw" style="background:${attr(teamCol(o.team_id))}"></span>${esc(o.team)}</span>` : '<span class="pill untagged">Untagged</span>' },
     { k: "ord", h: "Ordered", num: true, w: 110, sv: o => o.tot.ov, td: o => qv(o.tot.oq, o.tot.ov), ft: L => qv(sum(L, "oq"), sum(L, "ov")) },
-    { k: "bil", h: "Billed", num: true, w: 110, sv: o => o.tot.bvo, td: o => qv(o.tot.bq, o.tot.bvo), ft: L => qv(sum(L, "bq"), sum(L, "bvo")) },
+    { k: "bil", h: "Billed", num: true, w: 130, sv: o => o.tot.bvo + (o.tot.ev || 0), td: o => bqv(o.tot.bq, o.tot.eq || 0, o.tot.bvo + (o.tot.ev || 0)), ft: L => bqv(sum(L, "bq"), sum(L, "eq"), sum(L, "bvo") + sum(L, "ev")) },
     { k: "pen", h: "Pending", num: true, w: 110, sv: o => o.tot.pv, td: o => qv(o.tot.pq, o.tot.pv, o.tot.pq ? "wtxt" : ""), ft: L => qv(sum(L, "pq"), sum(L, "pv")) },
     { k: "cxl", h: "Cancelled / closed", num: true, hide: true, w: 140, sv: o => o.tot.cv, td: o => qv(o.tot.cq, o.tot.cv), ft: L => qv(sum(L, "cq"), sum(L, "cv")) },
-    { k: "fill", h: "Fill", w: 112, sv: pctOf, td: o => { const pct = pctOf(o), t = o.tot; return `<div class="fill"><span style="width:${pct}%"></span></div><div class="mut tnum">${pct.toFixed(0)}%${t.eq ? ` &#183; <span class="wtxt" title="Units billed in ERP that weren't in this order">+${units(t.eq)} extra</span>` : ""}</div>`; } },
+    { k: "fill", h: "Fill", w: 112, sv: pctOf, td: o => { const pct = pctOf(o), t = o.tot; return `<div class="fill"><span style="width:${pct}%"></span></div><div class="mut tnum">${pct.toFixed(0)}%</div>`; } },
     { k: "status", h: "Status", w: 190, tc: "wrapc", sv: o => STAGE_ORD[o.stage], td: statusCell },
     { k: "erp", h: "ERP order IDs", w: 140, tc: "tnum wrapc", sv: o => o.links.map(l => l.no).join(" "), td: o => o.links.map(l => `<span class="erpid ${l.found === false || l.cancelled ? "bad" : ""}">${esc(l.no)}</span>`).join(" ") || '<span class="mut">&#8212;</span>' },
     { k: "by", h: "Entered by", hide: true, w: 120, sv: o => o.created_by || "", td: o => esc(o.created_by || "") },
@@ -714,12 +716,12 @@ function drawOrders(id) {
      <div class="seg fseg">${filters.map(f => { const n = base.filter(f[2]).length; return `<button data-f="${f[0]}" class="${f[0] === fdef[0] ? "on" : ""}">${f[1]}<span class="fc">${n}</span></button>`; }).join("")}</div>
      ${seeAll() ? `<select data-team><option value="">All team members</option>${teams.map(t => `<option value="${t.id}" ${st.team === String(t.id) ? "selected" : ""}>${esc(t.name)}</option>`).join("")}<option value="none" ${st.team === "none" ? "selected" : ""}>&#8212; Untagged</option></select>` : ""}
      ${dp.html}
-     <input type="search" class="tsearch" data-q placeholder="Search order, dealer, PO, ERP ID…" value="${attr(st.q)}">
+     <input type="search" class="tsearch" data-q placeholder="Search order, dealer, ERP ID…" value="${attr(st.q)}">
      <div class="spacer"></div>${gPicker(gid, cols)}<button class="xbtn" data-x="csv">Export CSV</button><button class="xbtn" data-x="xls">Export XLS</button><button class="xbtn" data-x="lines" title="One row per SKU with ordered / billed / pending">Export SKU lines</button></div>
    <div class="scroll">${gTable(gid, cols, shown, { cls: "otbl", tr: o => `class="orow" data-o="${o.id}"`, foot: list,
       empty: base.length ? "No orders in this view." : desk ? "No orders in this period." : ORDERS.length ? "No orders in this period &#8212; try YTD or a custom range." : "No orders yet &#8212; create your first one.",
       more: n => list.length > shown.length ? `<tr><td colspan="${n}" style="text-align:center;padding:12px"><button class="btn ghost sm" data-more>Show ${Math.min(300, list.length - shown.length)} more of ${list.length - shown.length}</button></td></tr>` : "" })}</div>
-   <div class="tblnote">Billed = quantity on the linked ERP Sales Orders (cancelled ones ignored), valued at the order price. Pending = ordered &#8722; billed until the order is fully billed, short-closed or cancelled. Closed = fully billed or pending short-closed.</div></div>
+   <div class="tblnote">Billed = quantity on the linked ERP Sales Orders (cancelled ones ignored), valued at the order price; units billed outside the original order are added and shown in brackets as extra* (valued at the ERP rate). Fill rate counts only what was ordered. Pending = ordered &#8722; billed until the order is fully billed, short-closed or cancelled. Closed = fully billed or pending short-closed.<br><b>* Extra = units billed in ERP that were not in the original order (substitutions or add-ons).</b></div></div>
    ${desk && st.sel.size ? `<div class="bulkbar"><b>${st.sel.size} order${st.sel.size === 1 ? "" : "s"} selected</b><span class="mut">${money([...st.sel].reduce((t, i) => t + ORDERS.find(o => o.id === i).tot.ov, 0))}</span><div class="spacer"></div><button class="btn ghost sm" data-clrsel>Clear</button><button class="btn primary" data-bulk>Create billing sheet &#8594;</button></div>` : ""}`;
   const redraw = () => drawOrders(id);
   host.querySelectorAll("[data-f]").forEach(b => b.onclick = () => { st.f = b.dataset.f; st.lim = 0; redraw(); });
@@ -804,8 +806,8 @@ function exportOrders(list, kind, title) {
     const rows = []; list.forEach(o => o.lines.forEach(l => { const it = item(l.sku); rows.push([o.ref, (o.submitted_at || o.created_at || "").slice(0, 10), o.dealer, o.team || "", (STG[o.stage] || [o.stage])[0], l.sku, it.name, it.col, it.size, l.qty, l.price, l.billed, l.pending, Math.round(l.billed * l.price), Math.round(l.pending * l.price)]); }));
     downloadXLS(title + " SKU lines", head, rows); return;
   }
-  const head = ["Order", "Date", "Dealer", "Team member", "Status", "Ordered units", "Ordered value", "Billed units", "Billed value", "Pending units", "Pending value", "Cancelled / closed value", "ERP order IDs"];
-  const rows = list.map(o => [o.ref, (o.submitted_at || o.created_at || "").slice(0, 10), o.dealer, o.team || "", (STG[o.stage] || [o.stage])[0], o.tot.oq, Math.round(o.tot.ov), o.tot.bq, Math.round(o.tot.bvo), o.tot.pq, Math.round(o.tot.pv), Math.round(o.tot.cv), o.links.map(l => l.no).join(" ")]);
+  const head = ["Order", "Date", "Dealer", "Team member", "Status", "Ordered units", "Ordered value", "Billed units", "Billed value", "Extra billed units", "Extra billed value", "Pending units", "Pending value", "Cancelled / closed value", "ERP order IDs"];
+  const rows = list.map(o => [o.ref, (o.submitted_at || o.created_at || "").slice(0, 10), o.dealer, o.team || "", (STG[o.stage] || [o.stage])[0], o.tot.oq, Math.round(o.tot.ov), o.tot.bq, Math.round(o.tot.bvo), o.tot.eq || 0, Math.round(o.tot.ev || 0), o.tot.pq, Math.round(o.tot.pv), Math.round(o.tot.cv), o.links.map(l => l.no).join(" ")]);
   if (kind === "xls") downloadXLS(title, head, rows); else downloadCSV(title, head, rows);
 }
 
@@ -816,7 +818,7 @@ async function openOrder(id) {
   const t = o.tot, pct = t.ov ? Math.min(100, t.bvo / t.ov * 100) : 0;
   const lines = o.lines.map(l => Object.assign({}, l, { it: item(l.sku) })).sort((a, b) => a.it.name.localeCompare(b.it.name) || a.it.col.localeCompare(b.it.col) || szCmp(a.it.size, b.it.size));
   const ro = viewer() || isMgr();
-  const editable = !ro && !o.sheet_at && (isBE() ? (o.status === "draft" || o.status === "submitted") : (o.status === "draft" && o.team_id === meId()));
+  const editable = !ro && (isBE() ? (o.status === "draft" || o.status === "submitted") : (!o.sheet_at && o.status === "draft" && o.team_id === meId()));
   const acts = [];
   if (editable) acts.push(`<button class="btn ghost" data-a="edit">Edit order</button>`);
   const canCancel = !ro && o.stage !== "cancelled" && (isBE() ? o.stage !== "billed" : o.status === "draft");
@@ -837,7 +839,7 @@ async function openOrder(id) {
      ${o.remarks ? `<div class="kv" style="grid-column:1/-1"><span>Remarks</span><b style="font-weight:500">${esc(o.remarks)}</b></div>` : ""}
      ${o.closed_at ? `<div class="kv" style="grid-column:1/-1"><span>Pending closed</span><b style="font-weight:500">${esc(o.close_reason || "")} &#8212; ${esc(o.closed_by || "")}, ${dLong(o.closed_at)} (${units(t.cq)} units)</b></div>` : ""}
     </div>
-    <div class="prog"><div><span>Ordered</span><b class="tnum">${units(t.oq)}</b><i class="tnum">${money(t.ov)}</i></div><div><span>Billed</span><b class="tnum">${units(t.bq)}</b><i class="tnum">${money(t.bvo)}</i></div><div><span>Pending</span><b class="tnum ${t.pq ? "wtxt" : ""}">${units(t.pq)}</b><i class="tnum">${money(t.pv)}</i></div>${t.cq ? `<div><span>${o.stage === "cancelled" ? "Cancelled" : "Short-closed"}</span><b class="tnum">${units(t.cq)}</b><i class="tnum">${money(t.cv)}</i></div>` : ""}<div style="flex:2;min-width:160px"><span>Fill rate (value) &#183; ${pct.toFixed(0)}%</span><div class="fill big"><span style="width:${pct}%"></span></div></div></div>
+    <div class="prog"><div><span>Ordered</span><b class="tnum">${units(t.oq)}</b><i class="tnum">${money(t.ov)}</i></div><div><span>Billed${t.eq ? ` <span class="wtxt">(${units(t.eq)} extra*)</span>` : ""}</span><b class="tnum">${units(t.bq + (t.eq || 0))}</b><i class="tnum">${money(t.bvo + (t.ev || 0))}</i></div><div><span>Pending</span><b class="tnum ${t.pq ? "wtxt" : ""}">${units(t.pq)}</b><i class="tnum">${money(t.pv)}</i></div>${t.cq ? `<div><span>${o.stage === "cancelled" ? "Cancelled" : "Short-closed"}</span><b class="tnum">${units(t.cq)}</b><i class="tnum">${money(t.cv)}</i></div>` : ""}<div style="flex:2;min-width:160px"><span>Fill rate (value) &#183; ${pct.toFixed(0)}%</span><div class="fill big"><span style="width:${pct}%"></span></div></div></div>${t.eq ? `<div class="tblnote" style="margin:4px 0 12px">* Extra = units billed in ERP that were not in the original order (substitutions or add-ons).</div>` : ""}
     <h4>Order lines</h4>
     <div class="scroll"><table class="ltbl"><thead><tr><th>Product</th><th>Colour</th><th>Size</th><th>SKU</th><th class="num">Ordered</th><th class="num">Price</th><th class="num">Billed</th><th class="num">Pending</th></tr></thead><tbody>
      ${lines.map(l => `<tr><td>${esc(l.it.name)}</td><td>${esc(l.it.col)}</td><td>${esc(l.it.size)}</td><td class="mut">${esc(l.sku)}</td><td class="num tnum">${units(l.qty)}</td><td class="num tnum">${money(l.price)}</td><td class="num tnum">${units(l.billed)}</td><td class="num tnum ${l.pending ? "wtxt" : ""}">${units(l.pending)}${l.short_closed ? ` <span class="mut">(${units(l.short_closed)} closed)</span>` : ""}</td></tr>`).join("") || '<tr><td colspan="8" class="bempty">No lines.</td></tr>'}

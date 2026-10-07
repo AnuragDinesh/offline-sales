@@ -10,7 +10,7 @@ One app, two halves, behind the same "Howzat?" team password:
   4. **Link ERP order ID**: enter one or more front-end order IDs (5–6 digits). The app pulls them from ERP (`custom_saleor_order_no` on B2B Sales Orders) and checks them:
      * not found or cancelled → blocked
      * different customer, or already linked to another order → flagged, and needs a tick to confirm (with a note)
-  5. **Order tracker**: Ordered vs Billed vs Pending per order and per SKU, refreshed from ERP every 20 min (or on demand). When an ERP order covers several app orders, billed quantity is split oldest-first, and anything billed that wasn't ordered shows as "extra". The backend can **close the pending quantity** with a reason (e.g. out of stock).
+  5. **Order tracker**: Ordered vs Billed vs Pending per order and per SKU, refreshed from ERP every 2 hours (or with Refresh now, top right). When an ERP order covers several app orders, billed quantity is split oldest-first, and anything billed that wasn't ordered shows as "extra". The backend can **close the pending quantity** with a reason (e.g. out of stock).
 * **Entry:** after the password, pick **Billing** or **Sales dashboard** (switchable from the top bar).
   * **Sales dashboard** needs no name and shows everyone's numbers — billed sales (ERP sales orders, net of returns) and under picking only, never orders that are merely placed: Overview, Team members, Dealers, Products, Dealer Lens (with its billed ERP orders) and **Management** (team members + dealer tagging).
   * **Billing** asks for the name (*Who's batting?*): New order · My orders · My dealers; Backend also gets the **Backend** tab (Billing desk · Sales team · Dealer tagging · Billing sheet settings).

@@ -95,6 +95,8 @@ class DB:
                 host=u.hostname, port=u.port or 5432, database=(u.path or "/postgres").lstrip("/") or "postgres",
                 ssl_context=ssl.create_default_context())
         else:
+            if os.environ.get("VERCEL"):
+                raise ApiError(503, "Database not connected — in Vercel open Storage → Create Database → Neon → Connect to project, then Redeploy")
             import sqlite3
             self.conn = sqlite3.connect(LOCAL_DB)
 
@@ -176,7 +178,8 @@ def ensure_schema(db):
     for table, col, typ in (("orders", "dealer_ov", "TEXT"), ("orders", "ship_sel", "TEXT"),
                             ("dealers", "is_intl", "INTEGER DEFAULT 0"), ("dealers", "country", "TEXT"),
                             ("dealers", "ship_addrs", "TEXT"), ("team_members", "avatar", "TEXT"),
-                            ("orders", "cancel_reason", "TEXT"), ("orders", "cancelled_by", "TEXT"), ("orders", "cancelled_at", "TEXT")):
+                            ("orders", "cancel_reason", "TEXT"), ("orders", "cancelled_by", "TEXT"), ("orders", "cancelled_at", "TEXT"),
+                            ("erp_lines", "erp_row", "TEXT")):
         if db.pg:
             db.q("ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s %s" % (table, col, typ))
         elif col not in {r["name"] for r in db.q("PRAGMA table_info(%s)" % table)}:
@@ -232,13 +235,15 @@ def sku_map():
 def erp_refresh(db, nos):
     """Pull the B2B Sales Orders for these front-end order numbers and snapshot their lines."""
     nos = sorted(set(nos))
+    if db.pg:  # one refresh at a time: two overlapping pulls used to leave every ERP line in twice
+        db.q("SELECT pg_advisory_xact_lock(8137201)")
     t = now()
     for i in range(0, len(nos), 100):
         chunk = nos[i:i + 100]
         rows = erp_list("Sales Order",
                         ["name", "customer", "status", "transaction_date", "custom_saleor_order_no",
                          "`tabSales Order Item`.item_code", "`tabSales Order Item`.qty",
-                         "`tabSales Order Item`.rate", "`tabSales Order Item`.amount"],
+                         "`tabSales Order Item`.rate", "`tabSales Order Item`.amount", "`tabSales Order Item`.name as erp_row"],
                         [["custom_is_b2b", "=", 1], ["custom_saleor_order_no", "in", chunk]])
         db.q(f"DELETE FROM erp_lines WHERE saleor_no IN ({ph(len(chunk))})", chunk)
         found = set()
@@ -247,11 +252,11 @@ def erp_refresh(db, nos):
             if not no:
                 continue
             found.add(no)
-            db.q("INSERT INTO erp_lines (saleor_no, so_name, customer, so_status, so_date, sku, qty, rate, amount, fetched_at) "
-                 "VALUES (?,?,?,?,?,?,?,?,?,?)",
+            db.q("INSERT INTO erp_lines (saleor_no, so_name, customer, so_status, so_date, sku, qty, rate, amount, fetched_at, erp_row) "
+                 "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                  (no, r.get("name"), r.get("customer"), r.get("status"), str(r.get("transaction_date") or ""),
                   r.get("item_code"), float(r.get("qty") or 0), float(r.get("rate") or 0),
-                  float(r.get("amount") or 0), t))
+                  float(r.get("amount") or 0), t, r.get("erp_row")))
         for no in chunk:
             db.q("INSERT INTO erp_fetch (saleor_no, found, fetched_at) VALUES (?,?,?) "
                  "ON CONFLICT (saleor_no) DO UPDATE SET found = excluded.found, fetched_at = excluded.fetched_at",
@@ -266,7 +271,12 @@ def erp_snapshot(db, nos):
     nos = list(nos)
     for r in db.q(f"SELECT * FROM erp_fetch WHERE saleor_no IN ({ph(len(nos))})", nos):
         out[r["saleor_no"]] = {"found": bool(r["found"]), "fetched_at": r["fetched_at"], "sos": {}}
+    seen = set()
     for r in db.q(f"SELECT * FROM erp_lines WHERE saleor_no IN ({ph(len(nos))}) ORDER BY id", nos):
+        if r.get("erp_row"):
+            if (r["so_name"], r["erp_row"]) in seen:
+                continue
+            seen.add((r["so_name"], r["erp_row"]))
         e = out.setdefault(r["saleor_no"], {"found": True, "fetched_at": r["fetched_at"], "sos": {}})
         so = e["sos"].setdefault(r["so_name"], {"so": r["so_name"], "customer": r["customer"], "status": r["so_status"],
                                                 "date": r["so_date"], "lines": []})
@@ -531,7 +541,7 @@ def build_orders(db):
             "cancel_reason": o.get("cancel_reason"), "cancelled_by": o.get("cancelled_by"), "cancelled_at": o.get("cancelled_at"),
             "lines": L, "extras": extras[oid], "links": lk,
             "tot": {"oq": oq, "ov": ov, "bq": bq, "bv": bv, "pq": pq, "pv": pv, "cq": cq, "cv": cv, "bvo": bvo,
-                    "eq": sum(x["qty"] for x in extras[oid])},
+                    "eq": sum(x["qty"] for x in extras[oid]), "ev": sum(x["qty"] * (x["rate"] or 0) for x in extras[oid])},
         })
     return out
 
@@ -618,7 +628,8 @@ def a_orders(ctx, qs, body):
     if nos:
         fetched = {r["saleor_no"]: r["fetched_at"] for r in db.q("SELECT * FROM erp_fetch")}
         cutoff = (datetime.datetime.now(IST) - datetime.timedelta(seconds=ERP_STALE_SECONDS)).isoformat(timespec="seconds")
-        stale = [n for n in nos if (fetched.get(n) or "") < cutoff or qs.get("sync") == "1"]
+        old = {r["saleor_no"] for r in db.q("SELECT DISTINCT saleor_no FROM erp_lines WHERE erp_row IS NULL")}
+        stale = [n for n in nos if (fetched.get(n) or "") < cutoff or n in old or qs.get("sync") == "1"]
         if stale:
             try:
                 erp_refresh(db, stale)
@@ -885,10 +896,13 @@ def a_order_save(ctx, qs, body):
     oid = body.get("id")
     cur = load_order(db, oid) if oid else None
     if cur:
-        if cur["status"] not in ("draft", "submitted") or cur["sheet_at"]:
-            raise ApiError(409, "This order is already with billing and can't be edited")
+        if cur["status"] not in ("draft", "submitted"):
+            raise ApiError(409, "A cancelled order can't be edited")
         if cur["status"] == "submitted" and not ctx.is_backend:
             raise ApiError(403, "Once placed, an order can only be changed by the backend team")
+        if cur["sheet_at"] and not ctx.is_backend:
+            raise ApiError(409, "This order is already with billing and can't be edited")
+        old_lines = db.q("SELECT qty, price FROM order_lines WHERE order_id = ?", (cur["id"],))
     dealer = db.one("SELECT * FROM dealers WHERE id = ?", (body.get("dealer_id"),))
     if not dealer:
         raise ApiError(400, "Pick a dealer")
@@ -960,7 +974,14 @@ def a_order_save(ctx, qs, body):
               t if submit else None, ov_json, sel_json, cur["id"]))
         oid = cur["id"]
         db.q("DELETE FROM order_lines WHERE order_id = ?", (oid,))
-        ctx.log(oid, "Order updated" + (" and submitted to billing" if submit and cur["status"] == "draft" else ""))
+        if cur["status"] == "submitted":
+            oq, ov_ = sum(l["qty"] or 0 for l in old_lines), sum((l["qty"] or 0) * (l["price"] or 0) for l in old_lines)
+            nq, nv = sum(m["qty"] for m in merged.values()), sum(m["qty"] * m["price"] for m in merged.values())
+            ctx.log(oid, "Order edited by the backend team: %d → %d units, ₹%s → ₹%s%s" % (
+                oq, nq, format(round(ov_), ","), format(round(nv), ","),
+                " (billing sheet was already created — re-download it if ERP needs the change)" if cur["sheet_at"] else ""))
+        else:
+            ctx.log(oid, "Order updated" + (" and submitted to billing" if submit else ""))
     else:
         s = get_settings(db)
         r = db.one("INSERT INTO orders (dealer_id, team_id, po_ref, remarks, status, created_by, created_at, updated_at, submitted_at, dealer_ov, ship_sel) "
