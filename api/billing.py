@@ -173,7 +173,7 @@ def ph(n):
 _SCHEMA_OK = False
 
 
-SCHEMA_V = "2026-10-08"  # bump when ensure_schema gains a table / column
+SCHEMA_V = "2026-10-08b"  # bump when ensure_schema gains a table / column
 
 
 def ensure_schema(db):
@@ -210,6 +210,7 @@ def ensure_schema(db):
         "CREATE TABLE IF NOT EXISTS settings (k TEXT PRIMARY KEY, v TEXT)",
         "CREATE TABLE IF NOT EXISTS ui_prefs (who TEXT PRIMARY KEY, v TEXT, updated_at TEXT)",
         "CREATE TABLE IF NOT EXISTS erp_cache (k TEXT PRIMARY KEY, v TEXT, fetched_at TEXT)",
+        f"CREATE TABLE IF NOT EXISTS digest_recipients (id {ID}, email TEXT NOT NULL UNIQUE, name TEXT, added_by TEXT, added_at TEXT)",
         "CREATE INDEX IF NOT EXISTS ix_lines_order ON order_lines(order_id)",
         "CREATE INDEX IF NOT EXISTS ix_links_no ON order_links(saleor_no)",
         "CREATE INDEX IF NOT EXISTS ix_erp_no ON erp_lines(saleor_no)",
@@ -503,6 +504,16 @@ def build_orders(db):
             remaining[oid][l["sku"]] = remaining[oid].get(l["sku"], 0) + (l["qty"] or 0)
     billed = {o["id"]: {} for o in orders}
     extras = {o["id"]: [] for o in orders}
+    oprice = {}  # order price per SKU, to value billed units the same way everywhere
+    for oid, ls in olines.items():
+        for l in ls:
+            oprice.setdefault((oid, l["sku"]), l["price"] or 0)
+    by_day = {o["id"]: {} for o in orders}  # ERP Sales Order date -> [units, value] billed for this order
+
+    def add_day(oid, day, q, v):
+        x = by_day[oid].setdefault((day or "")[:10], [0, 0])
+        x[0] += q
+        x[1] += v
 
     def no_date(n):
         s = summarize_no(snap.get(n))
@@ -526,11 +537,13 @@ def build_orders(db):
                         b = billed[oid].setdefault(sku, [0, 0])
                         b[0] += take
                         b[1] += take * rate
+                        add_day(oid, so["date"], take, take * oprice.get((oid, sku), 0))
                         q -= take
                     if q <= 0:
                         break
                 if q > 0:
                     extras[oids[0]].append({"sku": sku, "qty": q, "rate": rate, "no": no, "so": so["so"]})
+                    add_day(oids[0], so["date"], q, q * rate)
 
     out = []
     for o in orders:
@@ -601,7 +614,7 @@ def build_orders(db):
             "warehouse": o["warehouse"], "closed_at": o["closed_at"], "closed_by": o["closed_by"],
             "close_reason": o["close_reason"],
             "cancel_reason": o.get("cancel_reason"), "cancelled_by": o.get("cancelled_by"), "cancelled_at": o.get("cancelled_at"),
-            "lines": L, "extras": extras[oid], "links": lk,
+            "lines": L, "extras": extras[oid], "links": lk, "billed_by_day": by_day[oid],
             "tot": {"oq": oq, "ov": ov, "bq": bq, "bv": bv, "pq": pq, "pv": pv, "cq": cq, "cv": cv, "bvo": bvo,
                     "eq": sum(x["qty"] for x in extras[oid]), "ev": sum(x["qty"] * (x["rate"] or 0) for x in extras[oid])},
         })
@@ -1253,6 +1266,314 @@ def a_unlink(ctx, qs, body):
     return {"ok": True}
 
 
+# ---------------------------------------------------------------- daily summary (dashboard view + daily email)
+def _inr(n):
+    n = int(round(n or 0))
+    neg, t = n < 0, str(abs(n))
+    if len(t) > 3:
+        h, t = t[:-3], t[-3:]
+        while len(h) > 2:
+            t = h[-2:] + "," + t
+            h = h[:-2]
+        t = h + "," + t
+    return ("-" if neg else "") + "\u20b9" + t
+
+
+def _units(n):
+    return _inr(n)[1:] if (n or 0) >= 0 else _inr(n)
+
+
+def _esc(x):
+    return str(x if x is not None else "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+
+def _dlabel(d, year=True):
+    try:
+        x = datetime.date.fromisoformat(d[:10])
+    except Exception:
+        return d or ""
+    return (x.strftime("%a ") if year else "") + str(x.day) + x.strftime(" %b %Y" if year else " %b")
+
+
+OPEN_STAGES = {"tobill": "Waiting for billing sheet", "sheet": "Sheet made, ERP ID not entered",
+               "linked": "ERP ID entered, nothing billed yet", "partial": "Partially billed"}
+
+
+def digest_data(db, day):
+    """Numbers for one day: that day's activity, month to date, per team member, and what needs attention."""
+    today = datetime.datetime.now(IST).date().isoformat()
+    m0 = day[:8] + "01"
+    orders = build_orders(db)
+    team = [t for t in db.q("SELECT * FROM team_members WHERE active = 1 ORDER BY name")]
+    oday = lambda o: (o["submitted_at"] or o["created_at"] or "")[:10]
+    placed = [o for o in orders if o["stage"] != "draft"]
+    T = lambda os, k: sum(o["tot"].get(k) or 0 for o in os)
+
+    def block(os):
+        canc = [o for o in os if o["stage"] == "cancelled"]
+        den = T(os, "ov") - T(canc, "cv")
+        return {"n": len(os), "ov": T(os, "ov"), "oq": T(os, "oq"),
+                "bv": T(os, "bvo") + T(os, "ev"), "bq": T(os, "bq") + T(os, "eq"), "eq": T(os, "eq"),
+                "pv": T(os, "pv"), "pq": T(os, "pq"), "cv": T(os, "cv"),
+                "fill": (T(os, "bvo") / den * 100) if den > 0 else 0}
+
+    w0 = (datetime.date.fromisoformat(day) - datetime.timedelta(days=6)).isoformat()
+    inr_ = lambda x, f: f <= (x or "")[:10] <= day
+
+    def span(os, f):
+        """Activity from f to the chosen day: orders placed, units billed in ERP (by ERP Sales Order date), cancellations."""
+        new = [o for o in os if inr_(oday(o), f)]
+        canc = [o for o in os if o["stage"] == "cancelled" and inr_(o.get("cancelled_at"), f)]
+        shut = [o for o in os if o["stage"] == "closed" and o.get("close_reason") and inr_(o.get("closed_at"), f)]
+        bl = [x for o in os for k, x in o["billed_by_day"].items() if f <= k <= day]
+        return {"n": len(new), "ov": T(new, "ov"), "oq": T(new, "oq"),
+                "bn": len([o for o in os if any(f <= k <= day for k in o["billed_by_day"])]),
+                "bv": sum(x[1] for x in bl), "bq": sum(x[0] for x in bl),
+                "cn": len(canc) + len(shut), "cv": T(canc, "ov") - T(canc, "bvo") + T(shut, "cv")}
+
+    mtd = [o for o in placed if m0 <= oday(o) <= day]
+    rows = []
+    ids = {t["id"] for t in team}
+    for t in team + [None]:
+        mine = (lambda o: o["team_id"] == t["id"]) if t else (lambda o: o["team_id"] not in ids)
+        os = [o for o in placed if mine(o)]
+        r = {"name": t["name"] if t else "Untagged", "day": span(os, day), "wk": span(os, w0),
+             "mtd": block([o for o in mtd if mine(o)])}
+        if t or r["mtd"]["n"] or r["wk"]["n"] or r["wk"]["bn"]:
+            rows.append(r)
+    rows.sort(key=lambda r: (r["name"] == "Untagged", -r["mtd"]["bv"], -r["mtd"]["ov"], r["name"]))
+
+    # needs attention: every open order right now, whatever its date
+    def age(o):
+        try:
+            return (datetime.date.fromisoformat(today) - datetime.date.fromisoformat(oday(o))).days
+        except Exception:
+            return 0
+    open_ = [o for o in placed if o["stage"] in OPEN_STAGES]
+    groups = []
+    for st, label in OPEN_STAGES.items():
+        os = [o for o in open_ if o["stage"] == st]
+        groups.append({"k": st, "label": label, "n": len(os), "pv": T(os, "pv"), "pq": T(os, "pq"),
+                       "old": max((age(o) for o in os), default=0)})
+    bad = sorted({l["no"] for o in placed if o["stage"] != "cancelled" for l in o["links"] if l.get("found") is False})
+    oldest = sorted(open_, key=lambda o: (-age(o), o["id"]))[:10]
+    last = db.one("SELECT MAX(fetched_at) AS m FROM erp_fetch")
+    return {"day": day, "today": today, "m0": m0, "w0": w0, "synced": last["m"] if last else None,
+            "dayTot": span(placed, day), "wkTot": span(placed, w0), "mtd": block(mtd), "rows": rows, "groups": groups, "bad": bad,
+            "oldest": [{"ref": o["ref"], "dealer": o["dealer"], "team": o["team"] or "Untagged", "date": oday(o), "age": age(o),
+                        "stage": OPEN_STAGES[o["stage"]], "pv": o["tot"]["pv"], "pq": o["tot"]["pq"]} for o in oldest]}
+
+
+SHORT_STAGE = {"tobill": "waiting for a billing sheet", "sheet": "with a sheet but no ERP ID",
+               "linked": "with an ERP ID but nothing billed yet", "partial": "partially billed"}
+
+
+def _lk(n):  # short rupees for email: 1.79 L / 2.3 Cr; below a lakh in full
+    n = n or 0
+    if abs(n) >= 1e7:
+        return "\u20b9%.2f Cr" % (n / 1e7)
+    if abs(n) >= 1e5:
+        return "\u20b9%.2f L" % (n / 1e5)
+    return _inr(n)
+
+
+def digest_html(d, link=""):
+    """Short, phone-friendly email (tables + inline styles); the dashboard shows exactly this."""
+    F = "font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;"
+    ink, mut, line, acc, warn = "#1d2a30", "#6b7b83", "#e3e8ea", "#0e6e86", "#b4722f"
+    D, M = d["dayTot"], d["mtd"]
+    dl = _dlabel(d["day"], False)
+    pl = lambda n, w="order": "%d %s%s" % (n, w, "" if n == 1 else "s")
+    sec = lambda t: f'<div style="{F}font-size:12px;font-weight:700;color:{mut};text-transform:uppercase;letter-spacing:.06em;margin:20px 0 6px">{t}</div>'
+    o = [f'<div style="max-width:520px;margin:0 auto;padding:16px 4px;{F}color:{ink}">',
+         f'<div style="font-size:18px;font-weight:700">Offline sales &#183; {_dlabel(d["day"])}</div>']
+
+    yest = (datetime.date.fromisoformat(d["today"]) - datetime.timedelta(days=1)).isoformat()
+    dh = ("Yesterday" if d["day"] == yest else "Today" if d["day"] == d["today"] else dl)
+    th = f'style="{F}font-size:11px;color:{mut};font-weight:600;padding:6px;border-bottom:1px solid {line};text-align:%s"'
+    td = f'style="{F}font-size:13px;padding:7px 6px;border-bottom:1px solid {line};text-align:%s;vertical-align:top%s"'
+    small = lambda t: f'<div style="font-size:11px;color:{mut};font-weight:400">{t}</div>'
+    nil = f'<span style="color:{mut}">&#8212;</span>'
+
+    W = d["wkTot"]
+    wl = f'{_dlabel(d["w0"], False)} &#8211; {dl}'
+    hd = lambda t, sub_: f'{t}<div style="font-size:10px;font-weight:400">{sub_}</div>'
+    cols = [hd(dh, dl) if dh != dl else dh, hd("Last 7 days", wl), hd("Month to date", "by order date")]
+
+    # yesterday, last 7 days and month to date, side by side
+    o.append(sec("At a glance"))
+    o.append(f'<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">'
+             f'<tr><th {th % "left"}></th>' + "".join(f'<th {th % "right"}>{c}</th>' for c in cols) + '</tr>')
+    plc = lambda x: (_lk(x["ov"]) + small(pl(x["n"]))) if x["n"] else nil
+    bil = lambda x, star="": (f'<b style="color:{acc}">{_lk(x["bv"])}</b>' + small(_units(x["bq"]) + " units" + star)) if x["bq"] else nil
+    cxl = lambda x: _lk(x["cv"]) if x["cv"] else nil
+    summ = [("Placed", plc(D), plc(W), plc(M)),
+            ("Billed", bil(D), bil(W), bil(M, "*" if M["eq"] else "")),
+            ("Cancelled / closed", cxl(D), cxl(W), cxl(M)),
+            ("Pending to bill", nil, nil, f'<span style="color:{warn if M["pv"] else ink}">{_lk(M["pv"])}</span>'),
+            ("Fill rate", nil, nil, "%.0f%%" % M["fill"])]
+    for row in summ:
+        o.append(f'<tr><td {td % ("left", "")}>{row[0]}</td>' + "".join(f'<td {td % ("right", ";white-space:nowrap")}>{v}</td>' for v in row[1:]) + '</tr>')
+    o.append('</table>')
+
+    # team: placed and billed, each for yesterday / last 7 days / month to date
+    rows = [r for r in d["rows"] if r["mtd"]["n"] or r["wk"]["n"] or r["wk"]["bq"]]
+    if rows:
+        tot = [{"name": "Total", "day": D, "wk": W, "mtd": M, "tot": True}] if len(rows) > 1 else []
+        short = [dh if dh != dl else dl, "7 days", "MTD"]
+        for title, k, extra in (("Team &#183; placed", "ov", False), ("Team &#183; billed", "bv", True)):
+            o.append(sec(title))
+            o.append(f'<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">'
+                     f'<tr><th {th % "left"}>Name</th>' + "".join(f'<th {th % "right"}>{c}</th>' for c in short)
+                     + (f'<th {th % "right"}>Fill MTD</th>' if extra else "") + '</tr>')
+            for r in rows + tot:
+                x = ";font-weight:700" if r.get("tot") else ""
+                c = [_lk(r[p][k]) if r[p][k] else nil for p in ("day", "wk", "mtd")]
+                if extra:
+                    c.append("%.0f%%" % r["mtd"]["fill"] if r["mtd"]["ov"] else nil)
+                o.append(f'<tr><td {td % ("left", x)}>{_esc(r["name"])}</td>'
+                         + "".join(f'<td {td % ("right", x + ";white-space:nowrap")}>{v}</td>' for v in c) + '</tr>')
+            o.append('</table>')
+
+    o.append(f'<div style="font-size:11px;color:{mut};margin-top:18px;line-height:1.5">Values incl. GST. {dh} and last 7 days = what happened on those days (orders placed, units billed in ERP). Month to date = orders placed this month and how far they are billed, as on the dashboard. '
+             + (f'* Includes {_units(M["eq"])} extra units billed outside the original orders. ' if M["eq"] else "")
+             + (f'<a href="{_esc(link)}" style="color:{acc}">Open the dashboard</a>' if link else "") + '</div></div>')
+    return "".join(o)
+
+
+def a_digest(ctx, qs, body):  # Daily summary tab (backend + Dugout); the daily email uses the same builder
+    if not (ctx.is_backend or ctx.is_mgr):
+        raise ApiError(403, "Only the backend team and the Dugout can see the daily summary")
+    day = (qs.get("date") or "").strip()
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
+        day = (datetime.datetime.now(IST).date() - datetime.timedelta(days=1)).isoformat()
+    d = digest_data(ctx.db, day)
+    return {"day": day, "today": d["today"], "subject": "Offline sales \u2014 %s \u00b7 last 7 days \u00b7 month to date" % _dlabel(day), "html": digest_html(d, digest_link(ctx))}
+
+
+EMAIL_RE = re.compile(r"^[^@\s,;<>]+@[^@\s,;<>]+\.[A-Za-z]{2,}$")
+
+
+def mail_sender():
+    return (os.environ.get("GMAIL_USER") or "").strip(), (os.environ.get("GMAIL_APP_PASSWORD") or "").replace(" ", "")
+
+
+def send_mail(to, subject, html):
+    """Send through the company Google Workspace mailbox (Gmail SMTP + app password)."""
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    from email.utils import formataddr
+    user, pw = mail_sender()
+    if not user or not pw:
+        raise ApiError(400, "The sending mailbox isn't connected yet — add GMAIL_USER and GMAIL_APP_PASSWORD in Vercel (Backend → Daily email → How to connect it)")
+    m = MIMEMultipart("alternative")
+    m["Subject"], m["From"], m["To"] = subject, formataddr(("Ten x You Offline Sales", user)), ", ".join(to)
+    m.attach(MIMEText("Daily offline sales summary - please view this email in HTML.", "plain", "utf-8"))
+    m.attach(MIMEText('<!doctype html><html><body style="margin:0;background:#ffffff">' + html + "</body></html>", "html", "utf-8"))
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as sm:
+            sm.login(user, pw)
+            sm.sendmail(user, to, m.as_string())
+    except smtplib.SMTPAuthenticationError:
+        raise ApiError(400, "Gmail refused the login for %s — check GMAIL_APP_PASSWORD in Vercel (it must be an App Password, not the normal password)" % user)
+
+
+def recipients(db):
+    return db.q("SELECT id, email, name, added_by, added_at FROM digest_recipients ORDER BY LOWER(COALESCE(NULLIF(name, ''), email))")
+
+
+def digest_link(ctx):
+    u = (os.environ.get("DASHBOARD_URL") or "").strip()
+    h = getattr(ctx, "host", "") or ""
+    return u or ("https://" + h if h and not h.startswith(("localhost", "127.")) else "")
+
+
+def digest_send(ctx, day, to):
+    d = digest_data(ctx.db, day)
+    subj = "Offline sales \u2014 %s \u00b7 last 7 days \u00b7 month to date" % _dlabel(day)
+    send_mail(to, subj, digest_html(d, digest_link(ctx)))
+    return subj
+
+
+def _last_sent(db):
+    r = db.one("SELECT v FROM erp_cache WHERE k = 'digest_last'")
+    return json.loads(r["v"]) if r and r["v"] else None
+
+
+def _set_last_sent(db, v):
+    db.q("INSERT INTO erp_cache (k, v, fetched_at) VALUES ('digest_last', ?, ?) "
+         "ON CONFLICT (k) DO UPDATE SET v = excluded.v, fetched_at = excluded.fetched_at", (json.dumps(v), now()))
+
+
+def a_digest_list(ctx, qs, body):  # Backend → Daily email
+    ctx.need_backend()
+    user, pw = mail_sender()
+    return {"recipients": recipients(ctx.db), "sender": user, "connected": bool(user and pw),
+            "scheduled": bool(os.environ.get("CRON_SECRET")), "last": _last_sent(ctx.db)}
+
+
+def a_digest_save(ctx, qs, body):  # add or edit one recipient
+    ctx.need_backend()
+    db = ctx.db
+    email = str(body.get("email") or "").strip().lower()
+    name = str(body.get("name") or "").strip()[:80]
+    if not EMAIL_RE.match(email):
+        raise ApiError(400, "That doesn't look like an email address")
+    rid = body.get("id")
+    dup = db.one("SELECT id FROM digest_recipients WHERE LOWER(email) = ?", (email,))
+    if dup and dup["id"] != rid:
+        raise ApiError(400, "%s is already on the list" % email)
+    if rid:
+        db.q("UPDATE digest_recipients SET email = ?, name = ? WHERE id = ?", (email, name, rid))
+    else:
+        db.q("INSERT INTO digest_recipients (email, name, added_by, added_at) VALUES (?,?,?,?)", (email, name, ctx.name, now()))
+    return {"recipients": recipients(db)}
+
+
+def a_digest_remove(ctx, qs, body):
+    ctx.need_backend()
+    ctx.db.q("DELETE FROM digest_recipients WHERE id = ?", (body.get("id"),))
+    return {"recipients": recipients(ctx.db)}
+
+
+def a_digest_send(ctx, qs, body):  # "Send test" to one person, or "Send now" to everyone
+    ctx.need_backend()
+    day = (datetime.datetime.now(IST).date() - datetime.timedelta(days=1)).isoformat()
+    to = [body["to"]] if body.get("to") else [r["email"] for r in recipients(ctx.db)]
+    if not to:
+        raise ApiError(400, "Add at least one email address first")
+    digest_send(ctx, day, to)
+    return {"ok": True, "to": to}
+
+
+def a_digest_cron(ctx, qs, body):  # Vercel Cron, every morning: refresh ERP, then email yesterday's summary
+    db = ctx.db
+    day = (datetime.datetime.now(IST).date() - datetime.timedelta(days=1)).isoformat()
+    last = _last_sent(db) or {}
+    if last.get("day") == day and last.get("ok") and qs.get("force") != "1":
+        return {"ok": True, "skipped": "already sent for " + day}
+    to = [r["email"] for r in recipients(db)]
+    if not to:
+        return {"ok": True, "skipped": "no recipients"}
+    nos = [r["saleor_no"] for r in db.q("SELECT DISTINCT saleor_no FROM order_links")]
+    if nos:
+        try:
+            erp_refresh(db, nos)
+            db.commit()
+        except Exception:  # send on the last synced figures rather than not at all
+            db.rollback()
+    try:
+        digest_send(ctx, day, to)
+        _set_last_sent(db, {"day": day, "at": now(), "to": len(to), "ok": True})
+    except Exception as e:
+        db.rollback()
+        _set_last_sent(db, {"day": day, "at": now(), "to": len(to), "ok": False, "error": getattr(e, "msg", str(e))})
+        db.commit()
+        raise
+    return {"ok": True, "day": day, "to": len(to)}
+
+
 ACTIONS = {
     "boot": a_boot, "items": a_items, "orders": a_orders,
     "dealer_save": a_dealer_save, "dealer_check": a_dealer_check, "dealer_tag": a_dealer_tag,
@@ -1260,9 +1581,11 @@ ACTIONS = {
     "order_save": a_order_save, "order_cancel": a_order_cancel, "order_close": a_order_close,
     "sheet": a_sheet, "link_check": a_link_check, "link_commit": a_link_commit, "unlink": a_unlink,
     "my_avatar": a_my_avatar, "prefs": a_prefs, "sales": a_sales, "erp_refresh": a_erp_refresh,
+    "digest": a_digest, "digest_list": a_digest_list, "digest_save": a_digest_save, "digest_remove": a_digest_remove,
+    "digest_send": a_digest_send, "digest_cron": a_digest_cron,
 }
-DUGOUT_OK = {"boot", "items", "orders", "prefs", "sales", "erp_refresh"}  # The Dugout is view-only
-NO_USER = {"boot", "items", "sales", "erp_refresh"}
+DUGOUT_OK = {"boot", "items", "orders", "prefs", "sales", "erp_refresh", "digest"}  # The Dugout is view-only
+NO_USER = {"boot", "items", "sales", "erp_refresh", "digest_cron"}
 
 
 class handler(BaseHTTPRequestHandler):
@@ -1293,7 +1616,11 @@ class handler(BaseHTTPRequestHandler):
         act = qs.get("a", "")
         db = None
         try:
-            if norm_key(self.headers.get("X-Key")) != norm_key(os.environ.get("SITE_PASSWORD") or "Howzat?"):
+            if act == "digest_cron":  # Vercel Cron signs its call with CRON_SECRET
+                sec = os.environ.get("CRON_SECRET") or ""
+                if not sec or (self.headers.get("Authorization") or "") != "Bearer " + sec:
+                    raise ApiError(401, "Not allowed")
+            elif norm_key(self.headers.get("X-Key")) != norm_key(os.environ.get("SITE_PASSWORD") or "Howzat?"):
                 raise ApiError(401, "Wrong team password — reload and sign in again")
             fn = ACTIONS.get(act)
             if not fn:
@@ -1322,6 +1649,7 @@ class handler(BaseHTTPRequestHandler):
                 ctx.is_backend = who == "backend"
             else:
                 ctx = Ctx(db, who)
+            ctx.host = self.headers.get("X-Forwarded-Host") or self.headers.get("Host") or ""
             out = fn(ctx, qs, body)
             db.commit()
             self._send(200, out)

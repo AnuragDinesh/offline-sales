@@ -1138,12 +1138,91 @@ B.renderSettings = function (host) {
   paint();
 };
 
+/* =================================================================== DAILY SUMMARY — the daily email, previewed */
+let DG = { day: "" };
+async function renderDaily() {
+  const host = document.getElementById("b-daily");
+  const ymd = d => new Date(d.getTime() - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+  const today = ymd(new Date()), yest = ymd(new Date(Date.now() - 864e5));
+  if (!DG.day) DG.day = yest;
+  const head = `<div class="ohead"><div><h2>Daily summary</h2><div class="mut">The summary that will be emailed every morning &#8212; it shows exactly what recipients will see. Pick a day to preview it.</div></div></div>
+   <div class="periodbar obar"><span class="lbl">Day</span><div class="seg"><button data-dd="${yest}" class="${DG.day === yest ? "on" : ""}">Yesterday</button><button data-dd="${today}" class="${DG.day === today ? "on" : ""}">Today so far</button></div>
+    <span class="dates"><input type="date" data-dday value="${DG.day}" max="${today}"></span></div>`;
+  host.innerHTML = head + loading("Building the summary…");
+  const wire = () => {
+    host.querySelectorAll("[data-dd]").forEach(b => b.onclick = () => { DG.day = b.dataset.dd; renderDaily(); });
+    const i = host.querySelector("[data-dday]"); i.onchange = () => { if (i.value) { DG.day = i.value; renderDaily(); } };
+  };
+  wire();
+  const want = DG.day;
+  let r; try { r = await B.api("digest&date=" + want); } catch (e) { if (tab === "b-daily") { host.innerHTML = head + errCard(e.message); wire(); } return; }
+  if (tab !== "b-daily" || DG.day !== want) return;
+  host.innerHTML = head + `<div class="mut" style="margin:0 0 8px">Email subject: <b>${esc(r.subject)}</b></div><div class="digest">${r.html}</div>`;
+  wire();
+}
+
+/* =================================================================== DAILY EMAIL (Billing → Backend → Daily email) */
+B.renderEmail = async function (host) {
+  let st = { edit: null, busy: false }, R;
+  host.innerHTML = loading("Loading the email list…");
+  try { R = await B.api("digest_list"); } catch (e) { host.innerHTML = errCard(e.message); return; }
+  const send = async (to, btn) => {
+    if (btn) { btn.disabled = true; btn.textContent = "Sending…"; }
+    try { const r = await B.api("digest_send", to ? { to } : {}); toast(`Sent to ${r.to.length === 1 ? r.to[0] : r.to.length + " people"}`, "ok"); }
+    catch (e) { toast(e.message, "err"); }
+    paint();
+  };
+  const save = async (row, id) => {
+    const email = row.querySelector("[data-em]").value.trim(), name = row.querySelector("[data-nm]").value.trim();
+    try { const r = await B.api("digest_save", { id, email, name }); R.recipients = r.recipients; st.edit = null; toast(id ? "Saved" : `${email} added`, "ok"); paint(); }
+    catch (e) { toast(e.message, "err"); }
+  };
+  function paint() {
+    const L = R.recipients, last = R.last;
+    const status = R.connected
+      ? `<span class="pill tagged">Connected</span> Sending from <b>${esc(R.sender)}</b> &#183; every morning at about 9 AM IST, with yesterday's numbers${R.scheduled ? "" : ' &#183; <span class="neg">daily schedule not switched on yet (CRON_SECRET missing)</span>'}`
+      : `<span class="pill untagged">Not connected</span> The sending mailbox isn't set up yet &#8212; you can build the list now; emails start once it's connected.
+         <details style="margin-top:8px"><summary class="lnk">How to connect it</summary><ol style="margin:6px 0 0;padding-left:20px;line-height:1.7">
+          <li>Sign in to the sending Google account &#8594; <b>myaccount.google.com/security</b> &#8594; turn on <b>2-Step Verification</b>.</li>
+          <li>Open <b>myaccount.google.com/apppasswords</b> &#8594; create one named &#8220;Offline sales email&#8221; &#8594; copy the 16-letter password.</li>
+          <li>Vercel &#8594; this project &#8594; Settings &#8594; Environment Variables: add <b>GMAIL_USER</b> (the email address), <b>GMAIL_APP_PASSWORD</b> (the 16 letters) and <b>CRON_SECRET</b> (any long random text).</li>
+          <li>Vercel &#8594; Deployments &#8594; &#8943; on the latest &#8594; <b>Redeploy</b>. Then come back here and press <b>Send test</b>.</li></ol></details>`;
+    const lastTxt = last ? (last.ok ? `Last sent ${dLong(last.at)} &#183; ${shortDate(last.day)} summary to ${last.to} ${last.to === 1 ? "person" : "people"}` : `<span class="neg">Last attempt ${dLong(last.at)} failed: ${esc(last.error || "")}</span>`) : "Not sent yet.";
+    const row = r => st.edit === r.id
+      ? `<tr data-row="${r.id}"><td><input data-nm value="${attr(r.name)}" placeholder="Name (optional)"></td><td><input data-em type="email" value="${attr(r.email)}"></td>
+          <td class="acts"><button class="btn primary sm" data-sv="${r.id}">Save</button> <button class="btn ghost sm" data-cx>Cancel</button></td></tr>`
+      : `<tr><td>${r.name ? esc(r.name) : '<span class="mut">&#8212;</span>'}</td><td><b>${esc(r.email)}</b></td>
+          <td class="acts"><button class="btn ghost sm" data-ed="${r.id}">Edit</button> <button class="btn ghost sm" data-ts="${attr(r.email)}" ${R.connected ? "" : "disabled"} title="Send yesterday's summary to this address only">Send test</button> <button class="btn ghost sm danger" data-rm="${r.id}">Remove</button></td></tr>`;
+    host.innerHTML = `<div class="card"><div class="head"><h3>Daily summary email</h3><span class="note">who gets the morning summary &#183; <a href="#" data-pv>preview it</a></span></div>
+     <div style="margin:0 0 6px;font-size:13px">${status}</div><div class="mut" style="font-size:12px;margin-bottom:14px">${lastTxt}</div>
+     <div class="scroll"><table class="otbl"><thead><tr><th style="width:30%">Name</th><th>Email</th><th style="width:250px"></th></tr></thead><tbody>
+      ${L.map(row).join("") || `<tr><td colspan="3" class="mut" style="padding:14px">Nobody on the list yet &#8212; add the first email below.</td></tr>`}
+      <tr data-row="new"><td><input data-nm placeholder="Name (optional)"></td><td><input data-em type="email" placeholder="name@srt10athleisure.com"></td><td class="acts"><button class="btn primary sm" data-add>+ Add</button></td></tr>
+     </tbody></table></div>
+     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px"><button class="btn" data-all ${R.connected && L.length ? "" : "disabled"}>Send yesterday's summary to everyone now</button></div></div>`;
+    host.querySelector("[data-pv]").onclick = e => { e.preventDefault(); show("b-daily"); };
+    host.querySelectorAll("[data-ed]").forEach(b => b.onclick = () => { st.edit = +b.dataset.ed; paint(); const i = host.querySelector(`[data-row="${st.edit}"] [data-em]`); i.focus(); });
+    host.querySelectorAll("[data-cx]").forEach(b => b.onclick = () => { st.edit = null; paint(); });
+    host.querySelectorAll("[data-sv]").forEach(b => b.onclick = () => save(b.closest("tr"), +b.dataset.sv));
+    host.querySelectorAll("[data-row] input").forEach(i => i.onkeydown = e => { if (e.key !== "Enter") return; const tr = i.closest("tr"); tr.dataset.row === "new" ? save(tr, null) : save(tr, +tr.dataset.row); });
+    host.querySelector("[data-add]").onclick = () => save(host.querySelector('[data-row="new"]'), null);
+    host.querySelectorAll("[data-rm]").forEach(b => b.onclick = async () => {
+      const r = R.recipients.find(x => x.id === +b.dataset.rm); if (!confirm(`Remove ${r.email} from the daily summary?`)) return;
+      try { const x = await B.api("digest_remove", { id: r.id }); R.recipients = x.recipients; toast(`${r.email} removed`, "ok"); paint(); } catch (e) { toast(e.message, "err"); }
+    });
+    host.querySelectorAll("[data-ts]").forEach(b => b.onclick = () => send(b.dataset.ts, b));
+    const all = host.querySelector("[data-all]"); all.onclick = () => { if (confirm(`Email yesterday's summary to all ${R.recipients.length} people now?`)) send(null, all); };
+  }
+  paint();
+};
+
 /* =================================================================== router */
 B.render = function (id) {
   if (id === "b-new") renderNew();
   else if (id === "b-orders" || id === "b-desk") renderOrders(id);
   else if (id === "b-dealers") renderDealers();
   else if (id === "b-score") renderScore();
+  else if (id === "b-daily") renderDaily();
 };
 B.resetForUser = function () { ORD = null; ORDERS = null; PREFS = {}; prefsP = null; Object.values(OV).forEach(st => { st.sel.clear(); st.team = ""; st.dealer = ""; st.q = ""; st.lim = 0; }); };
 })();

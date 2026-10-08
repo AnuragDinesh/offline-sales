@@ -254,6 +254,7 @@ body.rzing,body.rzing *{cursor:col-resize!important;user-select:none!important;}
 @media (max-width:640px){ .podium{grid-template-columns:1fr;} .fpick{max-width:none;flex:1;} }
 .tmstat{display:flex;gap:10px;font-size:11.5px;color:var(--muted);margin-left:auto;margin-right:6px;white-space:nowrap;}
 @media (max-width:640px){ .modetiles{grid-template-columns:1fr;} .whoami{width:100%;flex-wrap:wrap;} .obrow{grid-template-columns:minmax(0,1fr) 84px;} .obrow .obfill{display:none;} }
+.digest{background:#fff;color:#1d2a30;border:1px solid var(--line,#e3e8ea);border-radius:12px;max-width:600px;padding:4px 16px}
 </style>
 
 <div id="gate" class="gate">
@@ -315,14 +316,16 @@ body.rzing,body.rzing *{cursor:col-resize!important;user-select:none!important;}
   <div class="section" data-sec="bk-team" hidden><div id="bk-team"></div></div>
   <div class="section" data-sec="bk-tag" hidden><div id="bk-tag"></div></div>
   <div class="section" data-sec="bk-settings" hidden><div id="mgmt-settings"></div></div>
+  <div class="section" data-sec="bk-email" hidden><div id="bk-email"></div></div>
   <div class="section" data-sec="b-new" hidden><div id="b-new"></div></div>
   <div class="section" data-sec="b-orders" hidden><div id="b-orders"></div></div>
   <div class="section" data-sec="b-desk" hidden><div id="b-desk"></div></div>
   <div class="section" data-sec="b-dealers" hidden><div id="b-dealers"></div></div>
   <div class="section" data-sec="b-score" hidden><div id="b-score"></div></div>
+  <div class="section" data-sec="b-daily" hidden><div id="b-daily"></div></div>
 </div>
 <div id="modal-root"></div>
-<script src="billing.js?v=20261008101720"></script>
+<script src="billing.js?v=20261008204747"></script>
 <script>
 let DATA=null,BOOT=null;
 let TEAM,COLOURS,ASSIGN,TEAMID,TODAY,MONTH_START,YEAR_MIN;
@@ -640,13 +643,13 @@ function renderMgmt(){const body=document.getElementById("mgmt-body");const deal
 
 /* ---------- navigation: two modes (Billing / Sales dashboard), role-aware ---------- */
 const PERIOD_SECS=["overview","team","dealers","products"];
-const BK_SECS=[["b-desk","Billing desk"],["bk-team","Sales team"],["bk-tag","Dealer tagging"],["bk-settings","Billing sheet settings"]];
+const BK_SECS=[["b-desk","Billing desk"],["bk-team","Sales team"],["bk-tag","Dealer tagging"],["bk-settings","Billing sheet settings"],["bk-email","Daily email"]];
 const BK_IDS=BK_SECS.map(x=>x[0]);
 let MODE="billing";
 function navSecs(){const be=BILL.isBackend();
- if(MODE==="billing"&&BILL.isMgr())return{tabs:[["b-score","Scoreboard"],["b-orders","Team orders"],["b-dealers","Team dealers"]],home:"b-score"};
+ if(MODE==="billing"&&BILL.isMgr())return{tabs:[["b-score","Scoreboard"],["b-daily","Daily summary"],["b-orders","Team orders"],["b-dealers","Team dealers"]],home:"b-score"};
  if(MODE==="dash")return{tabs:[["overview","Overview"],["team","Team members"],["dealers","Dealers"],["products","Products"],["lens","Dealer Lens"],["mgmt","Management"]],home:"overview"};
- return be?{tabs:[["b-new","New order"],["b-orders","All orders"],["b-dealers","All dealers"],["b-desk","Backend"]],home:"b-desk"}
+ return be?{tabs:[["b-new","New order"],["b-orders","All orders"],["b-dealers","All dealers"],["b-daily","Daily summary"],["b-desk","Backend"]],home:"b-desk"}
   :{tabs:[["b-new","New order"],["b-orders","My orders"],["b-dealers","My dealers"]],home:"b-orders"};}
 const modeOf=id=>id.startsWith("b-")||id.startsWith("bk-")?"billing":"dash";
 /* Billing needs a name; the dashboard doesn't. */
@@ -667,7 +670,7 @@ function show(id){if(modeOf(id)!==MODE){if(modeOf(id)==="billing"&&!BILL.whoVali
  document.querySelectorAll("#subnav .sub").forEach(x=>x.classList.toggle("active",x.dataset.go===navId));document.querySelectorAll(".section").forEach(s=>s.hidden=s.dataset.sec!==id);
  document.getElementById("periodbar").hidden=!PERIOD_SECS.includes(id);document.getElementById("salesnote").hidden=MODE!=="dash";paintBkSub();refresh();window.scrollTo(0,0);}
 function refresh(){if(tab==="mgmt"){renderMgmt();return;}if(tab==="overview")renderOverview();else if(tab==="team"){renderTeamBars();renderPivot("team");}else if(tab==="dealers")renderPivot("dealers");else if(tab==="products")renderPivot("products");else if(tab==="lens")renderLens();
- else if(tab==="bk-team")renderTeamMgmt();else if(tab==="bk-tag")renderTagMgmt();else if(tab==="bk-settings")BILL.renderSettings(document.getElementById("mgmt-settings"));else if(tab.startsWith("b-"))BILL.render(tab);}
+ else if(tab==="bk-team")renderTeamMgmt();else if(tab==="bk-tag")renderTagMgmt();else if(tab==="bk-settings")BILL.renderSettings(document.getElementById("mgmt-settings"));else if(tab==="bk-email")BILL.renderEmail(document.getElementById("bk-email"));else if(tab.startsWith("b-"))BILL.render(tab);}
 
 function setRefreshed(){var el=document.getElementById("refreshed");if(!el||!DATA)return;const dot=document.getElementById("erpdot");if(!DATA.generatedAt){el.textContent="ERP data unavailable";dot&&dot.classList.add("old");return;}
  const t=new Date(DATA.generatedAt);dot&&dot.classList.toggle("old",Date.now()-t>2.5*3600e3);
