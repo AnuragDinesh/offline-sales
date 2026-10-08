@@ -322,7 +322,7 @@ body.rzing,body.rzing *{cursor:col-resize!important;user-select:none!important;}
   <div class="section" data-sec="b-score" hidden><div id="b-score"></div></div>
 </div>
 <div id="modal-root"></div>
-<script src="billing.js?v=20261007212021"></script>
+<script src="billing.js?v=20261008101720"></script>
 <script>
 let DATA=null,BOOT=null;
 let TEAM,COLOURS,ASSIGN,TEAMID,TODAY,MONTH_START,YEAR_MIN;
@@ -680,9 +680,14 @@ async function erpNow(){const btn=document.getElementById("erpnow");btn.disabled
  catch(e){BILL.toast(e.message,"err");}
  btn.disabled=false;btn.innerHTML="&#8635; Refresh now";}
 document.getElementById("erpnow").onclick=erpNow;
+let bgBusy=false;
+async function bgRefresh(){if(bgBusy)return;bgBusy=true;const el=document.getElementById("refreshed");if(el)el.textContent="Refreshing ERP data…";
+ try{const r=await BILL.api("erp_refresh",{auto:true});if(!r.busy)await applySales(await loadSales());}
+ catch(e){}
+ bgBusy=false;setRefreshed();}
 /* an open tab picks up the 2-hourly refresh on its own */
 setInterval(()=>{if(!DATA||!booted)return;const age=DATA.generatedAt?Date.now()-new Date(DATA.generatedAt):1e12;setRefreshed();
- if(age>=2*3600e3)loadSales().then(d=>{if(d.generatedAt!==DATA.generatedAt)applySales(d);}).catch(()=>{});},10*60e3);
+ if(age>=2*3600e3)bgRefresh();},10*60e3);
 function setRangeNote(){document.getElementById("rangenote").textContent=`${shortDate(gFrom)} – ${shortDate(gTo)}`;}
 document.addEventListener("click",e=>{if(!e.target.closest(".pick"))document.querySelectorAll(".pickmenu").forEach(m=>m.hidden=true);if(!e.target.closest(".ms"))document.querySelectorAll(".msmenu").forEach(m=>m.hidden=true);});
 let booted=false;
@@ -698,6 +703,7 @@ async function startApp(){
  /* entry: Billing vs Sales dashboard (remembered for this browser tab); Billing then asks for the name */
  const m=BILL.mode(),ok=BILL.whoValid();
  if(!m)BILL.renderMode(enterApp);else if(m==="billing"&&!ok)BILL.renderWho(enterApp);else enterApp();
+ if(DATA.stale)setTimeout(bgRefresh,300);
 }
 
 /* site password gate — Howzat? (checked by the server) */

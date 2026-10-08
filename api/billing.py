@@ -22,7 +22,7 @@ shared database, so every user sees the same figures and the same "last refreshe
 "Refresh now" forces a fresh pull for everyone.
 """
 from http.server import BaseHTTPRequestHandler
-import csv, datetime, importlib.util, io, json, os, re, ssl, time, urllib.parse, urllib.request
+import csv, datetime, gzip, importlib.util, io, json, threading, os, re, ssl, time, urllib.parse, urllib.request
 
 ERP_BASE = os.environ.get("ERP_URL", "https://erp.tenxyou.com").rstrip("/")
 DB_URL = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL") or ""
@@ -84,16 +84,26 @@ def norm_name(s):
 
 
 # ---------------------------------------------------------------- database
+_PG = threading.local()  # one connection per worker thread, kept open while the function instance stays warm
+
+
+def _pg_connect():
+    import pg8000.dbapi
+    u = urllib.parse.urlparse(DB_URL)
+    return pg8000.dbapi.connect(
+        user=urllib.parse.unquote(u.username or ""), password=urllib.parse.unquote(u.password or ""),
+        host=u.hostname, port=u.port or 5432, database=(u.path or "/postgres").lstrip("/") or "postgres",
+        ssl_context=ssl.create_default_context())
+
+
 class DB:
     def __init__(self):
         self.pg = bool(DB_URL)
+        self.used = False
         if self.pg:
-            import pg8000.dbapi
-            u = urllib.parse.urlparse(DB_URL)
-            self.conn = pg8000.dbapi.connect(
-                user=urllib.parse.unquote(u.username or ""), password=urllib.parse.unquote(u.password or ""),
-                host=u.hostname, port=u.port or 5432, database=(u.path or "/postgres").lstrip("/") or "postgres",
-                ssl_context=ssl.create_default_context())
+            if getattr(_PG, "conn", None) is None:
+                _PG.conn = _pg_connect()
+            self.conn = _PG.conn
         else:
             if os.environ.get("VERCEL"):
                 raise ApiError(503, "Database not connected — in Vercel open Storage → Create Database → Neon → Connect to project, then Redeploy")
@@ -103,8 +113,28 @@ class DB:
     def q(self, sql, params=()):
         if self.pg:
             sql = sql.replace("?", "%s")
+            if not self.used:  # a kept-open connection may have been dropped (e.g. Neon idled) — reconnect once
+                self.used = True
+                try:
+                    cur = self.conn.cursor()
+                    cur.execute(sql, tuple(params))
+                except Exception as e:
+                    if type(e).__name__ not in ("InterfaceError", "OperationalError", "BrokenPipeError",
+                                                "ConnectionResetError", "ConnectionAbortedError"):
+                        raise
+                    try:
+                        self.conn.close()
+                    except Exception:
+                        pass
+                    _PG.conn = self.conn = _pg_connect()
+                    cur = self.conn.cursor()
+                    cur.execute(sql, tuple(params))
+                return self._rows(cur)
         cur = self.conn.cursor()
         cur.execute(sql, tuple(params))
+        return self._rows(cur)
+
+    def _rows(self, cur):
         rows = []
         if cur.description:
             cols = [d[0] for d in cur.description]
@@ -127,9 +157,13 @@ class DB:
 
     def close(self):
         try:
-            self.conn.close()
+            if self.pg:
+                self.conn.rollback()  # leave the shared connection clean for the next request
+            else:
+                self.conn.close()
         except Exception:
-            pass
+            if self.pg:
+                _PG.conn = None
 
 
 def ph(n):
@@ -139,10 +173,20 @@ def ph(n):
 _SCHEMA_OK = False
 
 
+SCHEMA_V = "2026-10-08"  # bump when ensure_schema gains a table / column
+
+
 def ensure_schema(db):
     global _SCHEMA_OK
     if _SCHEMA_OK:
         return
+    try:
+        r = db.one("SELECT v FROM erp_cache WHERE k = '_schema'")
+        if r and r["v"] == SCHEMA_V:
+            _SCHEMA_OK = True
+            return
+    except Exception:
+        db.rollback()  # brand-new database: create everything below
     ID = "SERIAL PRIMARY KEY" if db.pg else "INTEGER PRIMARY KEY AUTOINCREMENT"
     NUM = "DOUBLE PRECISION" if db.pg else "REAL"
     stmts = [
@@ -184,6 +228,8 @@ def ensure_schema(db):
             db.q("ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s %s" % (table, col, typ))
         elif col not in {r["name"] for r in db.q("PRAGMA table_info(%s)" % table)}:
             db.q("ALTER TABLE %s ADD COLUMN %s %s" % (table, col, typ))
+    db.q("INSERT INTO erp_cache (k, v, fetched_at) VALUES ('_schema', ?, ?) "
+         "ON CONFLICT (k) DO UPDATE SET v = excluded.v, fetched_at = excluded.fetched_at", (SCHEMA_V, now()))
     db.commit()
     _SCHEMA_OK = True
 
@@ -218,11 +264,27 @@ def erp_list(doctype, fields, filters, limit=0):
 _ITEMS = {"t": 0, "rows": None, "map": None}
 
 
+_REQ = threading.local()  # the current request's database, for the item-master cache
+
+
 def item_rows():
     if _ITEMS["rows"] is None or time.time() - _ITEMS["t"] > 6 * 3600:
-        rows = erp_list("Item", ["item_code", "item_name", "custom_style_id", "custom_color", "custom_size",
-                                 "item_group"], [["disabled", "=", 0]])
-        _ITEMS.update(t=time.time(), rows=rows,
+        db, rows, t = getattr(_REQ, "db", None), None, time.time()
+        if db is not None:
+            r = db.one("SELECT v, fetched_at FROM erp_cache WHERE k = 'items'")
+            if r and r["v"]:
+                age = (datetime.datetime.now(IST) - datetime.datetime.fromisoformat(r["fetched_at"])).total_seconds()
+                if age < 6 * 3600:
+                    rows, t = json.loads(r["v"]), time.time() - age
+        if rows is None:
+            rows = erp_list("Item", ["item_code", "item_name", "custom_style_id", "custom_color", "custom_size",
+                                     "item_group"], [["disabled", "=", 0]])
+            if db is not None:
+                db.q("INSERT INTO erp_cache (k, v, fetched_at) VALUES ('items', ?, ?) "
+                     "ON CONFLICT (k) DO UPDATE SET v = excluded.v, fetched_at = excluded.fetched_at",
+                     (json.dumps(rows, separators=(",", ":")), now()))
+                db.commit()
+        _ITEMS.update(t=t, rows=rows,
                       map={(r["item_code"] or "").strip().upper(): r["item_code"] for r in rows if r.get("item_code")})
     return _ITEMS["rows"]
 
@@ -574,8 +636,10 @@ def _sales_build():  # the sales-dashboard pull lives in api/data.py
 def sales_snapshot(db, force=False):
     r = db.one("SELECT v, fetched_at FROM erp_cache WHERE k = 'sales'")
     cutoff = (datetime.datetime.now(IST) - datetime.timedelta(seconds=ERP_STALE_SECONDS)).isoformat(timespec="seconds")
-    if r and r["v"] and not force and (r["fetched_at"] or "") >= cutoff:
-        return json.loads(r["v"]), None
+    if r and r["v"] and not force:
+        d = json.loads(r["v"])
+        d["stale"] = (r["fetched_at"] or "") < cutoff  # the page then asks for a refresh in the background
+        return d, None
     try:
         d = _sales_build()
         d["generatedAt"] = now()
@@ -597,8 +661,15 @@ def a_sales(ctx, qs, body):
     return d
 
 
-def a_erp_refresh(ctx, qs, body):  # "Refresh now": pull everything from ERP for everyone
+def a_erp_refresh(ctx, qs, body):  # "Refresh now" or the page's background refresh: pull everything for everyone
     db = ctx.db
+    if body.get("auto"):  # background: skip if someone refreshed in the last few minutes or a refresh is running
+        r = db.one("SELECT fetched_at FROM erp_cache WHERE k = 'sales'")
+        recent = (datetime.datetime.now(IST) - datetime.timedelta(minutes=5)).isoformat(timespec="seconds")
+        if r and (r["fetched_at"] or "") >= recent:
+            return {"ok": True, "at": r["fetched_at"], "skipped": True}
+        if db.pg and not db.one("SELECT pg_try_advisory_xact_lock(8137202) AS ok")["ok"]:
+            return {"ok": True, "busy": True}
     d, warn = sales_snapshot(db, force=True)
     if warn:
         raise ApiError(502, warn)
@@ -611,6 +682,8 @@ def a_erp_refresh(ctx, qs, body):  # "Refresh now": pull everything from ERP for
             db.rollback()
             raise ApiError(502, "Sales figures refreshed, but linked orders could not be pulled: %s" % e)
     _ITEMS["t"] = 0  # product catalogue reloads on next use
+    db.q("DELETE FROM erp_cache WHERE k = 'items'")
+    db.commit()
     return {"ok": True, "at": d["generatedAt"]}
 
 
@@ -629,7 +702,8 @@ def a_orders(ctx, qs, body):
         fetched = {r["saleor_no"]: r["fetched_at"] for r in db.q("SELECT * FROM erp_fetch")}
         cutoff = (datetime.datetime.now(IST) - datetime.timedelta(seconds=ERP_STALE_SECONDS)).isoformat(timespec="seconds")
         old = {r["saleor_no"] for r in db.q("SELECT DISTINCT saleor_no FROM erp_lines WHERE erp_row IS NULL")}
-        stale = [n for n in nos if (fetched.get(n) or "") < cutoff or n in old or qs.get("sync") == "1"]
+        # stale links are pulled by the page's background refresh; only never-pulled ones (or ?sync=1) are fetched here
+        stale = [n for n in nos if not fetched.get(n) or n in old or qs.get("sync") == "1"]
         if stale:
             try:
                 erp_refresh(db, stale)
@@ -1200,7 +1274,14 @@ class handler(BaseHTTPRequestHandler):
 
     def _send(self, code, obj):
         body = json.dumps(obj, ensure_ascii=False, default=str, separators=(",", ":")).encode("utf-8")
+        gz = len(body) > 1500 and "gzip" in (self.headers.get("Accept-Encoding") or "")
+        if gz:
+            body = gzip.compress(body, 5)
         self.send_response(code)
+        if gz:
+            self.send_header("Content-Encoding", "gzip")
+            self.send_header("Vary", "Accept-Encoding")
+        self.send_header("Content-Length", str(len(body)))
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
@@ -1231,6 +1312,7 @@ class handler(BaseHTTPRequestHandler):
             if who == "dugout" and act not in DUGOUT_OK:
                 raise ApiError(403, "The Dugout is view-only")
             db = DB()
+            _REQ.db = db
             ensure_schema(db)
             if act in NO_USER:
                 class _C:  # read-only actions don't need a resolved user
@@ -1252,5 +1334,6 @@ class handler(BaseHTTPRequestHandler):
                 db.rollback()
             self._send(500, {"error": "%s: %s" % (type(e).__name__, e)})
         finally:
+            _REQ.db = None
             if db:
                 db.close()

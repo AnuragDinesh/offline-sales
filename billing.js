@@ -696,6 +696,7 @@ function orderCols(desk, st, allSel) {
   if (desk) c.push({ k: "act", fixed: true, w: 128, h: "", tc: "acts", td: o => o.stage === "tobill" ? `<button class="btn sm" data-sheet="${o.id}">Billing sheet</button>` : ACTION.includes(o.stage) ? `<button class="btn sm" data-link="${o.id}">+ ERP ID</button>` : "" });
   return c;
 }
+let qT = 0;
 function drawOrders(id) {
   const host = document.getElementById(id), st = OV[id], desk = id === "b-desk";
   const base0 = visibleOrders(id, true), base = st.dealer ? base0.filter(o => String(o.dealer_id) === st.dealer) : base0;
@@ -729,7 +730,7 @@ function drawOrders(id) {
   wireDealerPick(host, st, dp.list, redraw);
   gWire(host, gid, cols, redraw);
   const tsel = host.querySelector("[data-team]"); if (tsel) tsel.onchange = () => { st.team = tsel.value; st.lim = 0; redraw(); };
-  const q = host.querySelector("[data-q]"); q.oninput = () => { st.q = q.value; const p = q.selectionStart; redraw(); const n = document.querySelector(`#${id} [data-q]`); n.focus(); n.setSelectionRange(p, p); };
+  const q = host.querySelector("[data-q]"); q.oninput = () => { st.q = q.value; clearTimeout(qT); qT = setTimeout(() => { const p = q.selectionStart; redraw(); const n = document.querySelector(`#${id} [data-q]`); n.focus(); n.setSelectionRange(p, p); }, 180); };
   const nb = host.querySelector("[data-new]"); if (nb) nb.onclick = () => { if (ORD && ORD.id) ORD = null; show("b-new"); };
   host.querySelectorAll("[data-x]").forEach(b => b.onclick = () => exportOrders(list, b.dataset.x, desk ? "Billing desk" : "Orders"));
   host.querySelectorAll("tr.orow").forEach(tr => tr.onclick = e => { if (e.target.closest("input,button")) return; openOrder(+tr.dataset.o); });
@@ -762,21 +763,21 @@ function drawScore() {
   const un = placed.filter(o => !act.some(t => t.id === o.team_id)); if (un.length) rows.push({ t: null, id: "none", name: "Untagged", os: un });
   rows.forEach(r => {
     const os = r.os, canc = os.filter(o => o.stage === "cancelled"), live = os.length - canc.length;
-    Object.assign(r, { n: os.length, nc: canc.length, P: sum(os, "ov"), B: sum(os, "bvo"), Pe: sum(os, "pv"), C: sum(os, "cv"), q: sum(os, "oq"), bq: sum(os, "bq"),
+    Object.assign(r, { n: os.length, nc: canc.length, P: sum(os, "ov"), Bo: sum(os, "bvo"), E: sum(os, "ev"), eq: sum(os, "eq"), Pe: sum(os, "pv"), C: sum(os, "cv"), q: sum(os, "oq"), bq: sum(os, "bq") + sum(os, "eq"),
       ad: new Set(os.map(o => o.dealer_id)).size, dl: r.t ? BOOT.dealers.filter(d => d.team_id === r.t.id && !d.excluded).length : 0,
       last: os.reduce((m, o) => oday(o) > m ? oday(o) : m, "") });
-    const den = r.P - sum(canc, "cv"); r.fill = den > 0 ? r.B / den * 100 : 0; r.aov = live ? (r.P - sum(canc, "ov")) / live : 0;
+    r.B = r.Bo + r.E; const den = r.P - sum(canc, "cv"); r.fill = den > 0 ? r.Bo / den * 100 : 0; r.aov = live ? (r.P - sum(canc, "ov")) / live : 0;
   });
   const ranked = rows.filter(r => r.t).sort((a, b) => b.B - a.B || b.P - a.P), pre = ranked.concat(rows.filter(r => !r.t));
   const rankOf = r => r.t ? ranked.indexOf(r) + 1 : 999, medal = ["&#129351;", "&#129352;", "&#129353;"];
   const T = k => rows.reduce((t, r) => t + r[k], 0);
-  const bar = r => { const d = r.P || 1; return `<div class="mix" title="Billed ${money(r.B)} · Pending ${money(r.Pe)} · Cancelled / closed ${money(r.C)}"><span class="b" style="width:${r.B / d * 100}%"></span><span class="p" style="width:${r.Pe / d * 100}%"></span><span class="c" style="width:${r.C / d * 100}%"></span></div>`; };
+  const bar = r => { const d = Math.max(r.P, r.B + r.Pe + r.C) || 1; return `<div class="mix" title="Billed ${money(r.B)} · Pending ${money(r.Pe)} · Cancelled / closed ${money(r.C)}"><span class="b" style="width:${r.B / d * 100}%"></span><span class="p" style="width:${r.Pe / d * 100}%"></span><span class="c" style="width:${r.C / d * 100}%"></span></div>`; };
   const cols = [
     { k: "rank", h: "#", w: 56, sv: rankOf, td: r => r.t ? (rankOf(r) <= 3 && r.B > 0 ? medal[rankOf(r) - 1] : rankOf(r)) : '<span class="mut">&#8212;</span>' },
     { k: "name", h: "Team member", w: 210, sv: r => r.name.toLowerCase(), td: r => `<span class="tmcell">${r.t ? avatarHtml(r.t, 30) : '<span class="av avi" style="width:30px;height:30px;background:#96a4ab;font-size:12px">?</span>'}<b>${esc(r.name)}</b></span>`, ft: () => "Team total" },
     { k: "orders", h: "Orders", num: true, w: 90, sv: r => r.n, td: r => `${units(r.n)}${r.nc ? `<div class="mut">${r.nc} cancelled</div>` : ""}`, ft: () => units(T("n")) },
     { k: "placed", h: "Placed", num: true, w: 120, sv: r => r.P, td: r => `${money(r.P)}<div class="mut">${units(r.q)} units</div>`, ft: () => money(T("P")) },
-    { k: "billed", h: "Billed", num: true, w: 120, sv: r => r.B, td: r => `<b>${money(r.B)}</b><div class="mut">${units(r.bq)} units</div>`, ft: () => money(T("B")) },
+    { k: "billed", h: "Billed", num: true, w: 120, sv: r => r.B, td: r => `<b>${money(r.B)}</b><div class="mut">${units(r.bq)} units${r.eq ? ` <span class="wtxt">(${units(r.eq)} extra*)</span>` : ""}</div>`, ft: () => money(T("B")) },
     { k: "pending", h: "Pending to bill", num: true, w: 124, sv: r => r.Pe, td: r => `<span class="${r.Pe ? "wtxt" : ""}">${money(r.Pe)}</span>`, ft: () => money(T("Pe")) },
     { k: "cxl", h: "Cancelled / closed", num: true, w: 130, sv: r => r.C, td: r => money(r.C), ft: () => money(T("C")) },
     { k: "fill", h: "Fill rate", w: 120, sv: r => r.fill, td: r => `<div class="fill"><span style="width:${Math.min(100, r.fill)}%"></span></div><div class="mut tnum">${r.fill.toFixed(0)}%</div>` },
@@ -793,12 +794,12 @@ function drawScore() {
    ${podium.length ? `<div class="podh">Top of the table <span class="mut">&#183; by billed value</span></div><div class="podium">${podium.map((r, i) => `<button class="pod p${i + 1}" data-tm="${r.id}">${r.B > 0 ? `<span class="medal">${medal[i]}</span>` : ""}${avatarHtml(r.t, 64)}<span class="pn">${esc(r.name)}</span><span class="pv tnum">${lakh(r.B)} <i>billed</i></span><span class="mut tnum">${r.fill.toFixed(0)}% fill &#183; ${r.n} order${r.n === 1 ? "" : "s"} &#183; ${lakh(r.Pe)} pending</span></button>`).join("")}</div>` : ""}
    <div class="card"><div class="toolbar"><h3 style="margin:0 6px 0 0;font-size:14px">Team members</h3>${dp.html}<div class="spacer"></div>${gPicker("score", cols)}<button class="xbtn" data-xs>Export XLS</button></div>
     <div class="scroll">${gTable("score", cols, list, { cls: "otbl", tr: r => `class="orow" data-tm="${r.id}"`, foot: rows, empty: "No sales people yet." })}</div>
-    <div class="tblnote">Values at the order price (incl. GST), by order date. Billed = quantity on linked ERP orders. Fill rate = billed &#247; (placed &#8722; cancelled). <span class="mix-key"><i class="b"></i>billed <i class="p"></i>pending <i class="c"></i>cancelled / closed</span></div></div>`;
+    <div class="tblnote">Values at the order price (incl. GST), by order date. Billed = quantity on linked ERP orders. Fill rate = billed against the order &#247; (placed &#8722; cancelled).${T("eq") ? `<br><b>* Extra = units billed in ERP that were not in the original order (substitutions or add-ons).</b>` : ""} <span class="mix-key"><i class="b"></i>billed <i class="p"></i>pending <i class="c"></i>cancelled / closed</span></div></div>`;
   const redraw = () => drawScore();
   wirePeriod(host, st, redraw); wireDealerPick(host, st, dp.list, redraw); gWire(host, "score", cols, redraw);
   host.querySelectorAll("[data-tm]").forEach(el => el.onclick = () => { const o = OV["b-orders"]; Object.assign(o, { team: el.dataset.tm, dealer: st.dealer, pm: st.pm, pf: st.pf, pt: st.pt, f: "all", lim: 0 }); show("b-orders"); });
-  host.querySelector("[data-xs]").onclick = () => downloadXLS("Scoreboard", ["Rank", "Team member", "Orders", "Cancelled orders", "Placed value", "Units ordered", "Billed value", "Units billed", "Pending value", "Cancelled / closed value", "Fill rate %", "Dealers ordering", "Dealers tagged", "Avg order value", "Last order"],
-    pre.map(r => [r.t ? rankOf(r) : "", r.name, r.n, r.nc, Math.round(r.P), r.q, Math.round(r.B), r.bq, Math.round(r.Pe), Math.round(r.C), Math.round(r.fill), r.ad, r.dl, Math.round(r.aov), r.last]));
+  host.querySelector("[data-xs]").onclick = () => downloadXLS("Scoreboard", ["Rank", "Team member", "Orders", "Cancelled orders", "Placed value", "Units ordered", "Billed value", "Units billed", "Extra units billed", "Pending value", "Cancelled / closed value", "Fill rate %", "Dealers ordering", "Dealers tagged", "Avg order value", "Last order"],
+    pre.map(r => [r.t ? rankOf(r) : "", r.name, r.n, r.nc, Math.round(r.P), r.q, Math.round(r.B), r.bq, r.eq, Math.round(r.Pe), Math.round(r.C), Math.round(r.fill), r.ad, r.dl, Math.round(r.aov), r.last]));
 }
 function exportOrders(list, kind, title) {
   if (kind === "lines") {
