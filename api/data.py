@@ -38,7 +38,7 @@ def _query(doctype, fields, filters, limit=0):
     })
     url = BASE + "/api/resource/" + urllib.parse.quote(doctype) + "?" + params
     req = urllib.request.Request(url, headers=_headers())
-    with urllib.request.urlopen(req, timeout=45) as resp:
+    with urllib.request.urlopen(req, timeout=25) as resp:
         return json.load(resp).get("data", [])
 
 
@@ -52,6 +52,19 @@ def _norm(name):
 def _is_marketplace(name):
     low = name.lower()
     return any(k in low for k in MARKETPLACE_KEYWORDS)
+
+
+# ERP items with no colour filled in: colour from the SKU's last two letters (names from the catalogue master).
+# Once the colour is filled in ERP, ERP's value is used instead.
+COLOUR_BY_SKU = {"10XU025": {"BB": "Black Beauty", "ST": "Silhouette", "SW": "Snow White"}}  # Stryx
+
+
+def item_colour(code, colour):
+    c = (colour or "").strip()
+    if c:
+        return c
+    m = COLOUR_BY_SKU.get(str(code or "")[:7].upper())
+    return m.get(str(code or "")[-2:].upper(), "") if m else ""
 
 
 def build():
@@ -98,7 +111,7 @@ def build():
 
     def enrich(sku):
         a = attr.get(sku, {})
-        return (a.get("item_name") or sku, a.get("custom_color") or "-", str(a.get("custom_size") or "-"))
+        return (a.get("item_name") or sku, item_colour(sku, a.get("custom_color")) or "-", str(a.get("custom_size") or "-"))
 
     lines = []
     for x in off_lines + ret_lines:

@@ -93,7 +93,10 @@ def _pg_connect():
     return pg8000.dbapi.connect(
         user=urllib.parse.unquote(u.username or ""), password=urllib.parse.unquote(u.password or ""),
         host=u.hostname, port=u.port or 5432, database=(u.path or "/postgres").lstrip("/") or "postgres",
-        ssl_context=ssl.create_default_context())
+        ssl_context=ssl.create_default_context(), timeout=15)  # a dead network link fails in 15 s instead of hanging
+
+
+PG_IDLE = 120  # seconds: after this long unused, open a fresh connection (Neon drops idle ones)
 
 
 class DB:
@@ -101,8 +104,16 @@ class DB:
         self.pg = bool(DB_URL)
         self.used = False
         if self.pg:
-            if getattr(_PG, "conn", None) is None:
+            old = getattr(_PG, "conn", None)
+            if old is not None and time.time() - getattr(_PG, "at", 0) > PG_IDLE:
+                try:
+                    old.close()
+                except Exception:
+                    pass
+                old = _PG.conn = None
+            if old is None:
                 _PG.conn = _pg_connect()
+            _PG.at = time.time()
             self.conn = _PG.conn
         else:
             if os.environ.get("VERCEL"):
@@ -120,7 +131,7 @@ class DB:
                     cur.execute(sql, tuple(params))
                 except Exception as e:
                     if type(e).__name__ not in ("InterfaceError", "OperationalError", "BrokenPipeError",
-                                                "ConnectionResetError", "ConnectionAbortedError"):
+                                                "ConnectionResetError", "ConnectionAbortedError", "TimeoutError", "timeout"):
                         raise
                     try:
                         self.conn.close()
@@ -258,7 +269,7 @@ def erp_list(doctype, fields, filters, limit=0):
                                      "limit_page_length": limit})
     url = ERP_BASE + "/api/resource/" + urllib.parse.quote(doctype) + "?" + params
     req = urllib.request.Request(url, headers=_erp_headers())
-    with urllib.request.urlopen(req, timeout=45) as resp:
+    with urllib.request.urlopen(req, timeout=25) as resp:
         return json.load(resp).get("data", [])
 
 
@@ -700,10 +711,23 @@ def a_erp_refresh(ctx, qs, body):  # "Refresh now" or the page's background refr
     return {"ok": True, "at": d["generatedAt"]}
 
 
+# ERP items with no colour filled in: colour from the SKU's last two letters (names from the catalogue master).
+# Once the colour is filled in ERP, ERP's value is used instead.
+COLOUR_BY_SKU = {"10XU025": {"BB": "Black Beauty", "ST": "Silhouette", "SW": "Snow White"}}  # Stryx
+
+
+def item_colour(code, colour):
+    c = (colour or "").strip()
+    if c:
+        return c
+    m = COLOUR_BY_SKU.get(str(code or "")[:7].upper())
+    return m.get(str(code or "")[-2:].upper(), "") if m else ""
+
+
 def a_items(ctx, qs, body):
     rows = item_rows()
     return {"items": [[r["item_code"], r.get("item_name") or "", r.get("custom_style_id") or "",
-                       r.get("custom_color") or "", str(r.get("custom_size") or "").strip(), r.get("item_group") or ""]
+                       item_colour(r["item_code"], r.get("custom_color")), str(r.get("custom_size") or "").strip(), r.get("item_group") or ""]
                       for r in rows if r.get("item_code")]}
 
 
@@ -1510,7 +1534,8 @@ def a_digest_list(ctx, qs, body):  # Backend → Daily email
     ctx.need_backend()
     user, pw = mail_sender()
     return {"recipients": recipients(ctx.db), "sender": user, "connected": bool(user and pw),
-            "scheduled": bool(os.environ.get("CRON_SECRET")), "last": _last_sent(ctx.db)}
+            "scheduled": bool(os.environ.get("CRON_SECRET")), "last": _last_sent(ctx.db),
+            "hit": (lambda r: json.loads(r["v"]) if r and r["v"] else None)(ctx.db.one("SELECT v FROM erp_cache WHERE k = 'digest_hit'"))}
 
 
 def a_digest_save(ctx, qs, body):  # add or edit one recipient
@@ -1547,32 +1572,63 @@ def a_digest_send(ctx, qs, body):  # "Send test" to one person, or "Send now" to
     return {"ok": True, "to": to}
 
 
-def a_digest_cron(ctx, qs, body):  # Vercel Cron, every morning: refresh ERP, then email yesterday's summary
+def _kv(db, k, v):
+    db.q("INSERT INTO erp_cache (k, v, fetched_at) VALUES (?, ?, ?) "
+         "ON CONFLICT (k) DO UPDATE SET v = excluded.v, fetched_at = excluded.fetched_at", (k, json.dumps(v), now()))
+
+
+def run_digest(ctx, by, force=False):
+    """Email yesterday's summary once per day. Used by the 9 AM schedule and by the catch-up when someone opens the app."""
     db = ctx.db
     day = (datetime.datetime.now(IST).date() - datetime.timedelta(days=1)).isoformat()
-    last = _last_sent(db) or {}
-    if last.get("day") == day and last.get("ok") and qs.get("force") != "1":
-        return {"ok": True, "skipped": "already sent for " + day}
+
+    def claim():  # one sender at a time; the lock lasts until this transaction ends
+        if db.pg and not db.one("SELECT pg_try_advisory_xact_lock(8137203) AS ok")["ok"]:
+            return "already sending"
+        last = _last_sent(db) or {}
+        if last.get("day") == day and last.get("ok") and not force:
+            return "already sent for " + day
+        return None
+    why = claim()
+    if why:
+        return {"ok": True, "skipped": why}
     to = [r["email"] for r in recipients(db)]
-    if not to:
-        return {"ok": True, "skipped": "no recipients"}
+    if not to or not all(mail_sender()):
+        return {"ok": True, "skipped": "no recipients or sender not connected"}
     nos = [r["saleor_no"] for r in db.q("SELECT DISTINCT saleor_no FROM order_links")]
     if nos:
         try:
-            erp_refresh(db, nos)
-            db.commit()
+            erp_refresh(db, nos)  # saved together with the "sent" mark below, inside the same locked transaction
         except Exception:  # send on the last synced figures rather than not at all
             db.rollback()
+            why = claim()
+            if why:
+                return {"ok": True, "skipped": why}
     try:
         digest_send(ctx, day, to)
-        _set_last_sent(db, {"day": day, "at": now(), "to": len(to), "ok": True})
+        _set_last_sent(db, {"day": day, "at": now(), "to": len(to), "ok": True, "by": by})
     except Exception as e:
         db.rollback()
-        _set_last_sent(db, {"day": day, "at": now(), "to": len(to), "ok": False, "error": getattr(e, "msg", str(e))})
+        _set_last_sent(db, {"day": day, "at": now(), "to": len(to), "ok": False, "by": by, "error": getattr(e, "msg", str(e))})
         db.commit()
         raise
     return {"ok": True, "day": day, "to": len(to)}
 
+
+def a_digest_cron(ctx, qs, body):  # Vercel Cron, every morning at ~9 AM IST
+    sec = os.environ.get("CRON_SECRET") or ""
+    good = bool(sec) and ctx.auth == "Bearer " + sec
+    _kv(ctx.db, "digest_hit", {"at": now(), "auth": good})  # every knock from the scheduler is recorded
+    ctx.db.commit()
+    if not good:
+        raise ApiError(401, "Not allowed")
+    return run_digest(ctx, "9 AM schedule", qs.get("force") == "1")
+
+
+def a_digest_catchup(ctx, qs, body):  # safety net: the first person to open the app after 10 AM sends it if the schedule didn't
+    if datetime.datetime.now(IST).hour < 10:
+        return {"ok": True, "skipped": "before 10 AM"}
+    return run_digest(ctx, "catch-up (app opened)")
 
 ACTIONS = {
     "boot": a_boot, "items": a_items, "orders": a_orders,
@@ -1582,10 +1638,10 @@ ACTIONS = {
     "sheet": a_sheet, "link_check": a_link_check, "link_commit": a_link_commit, "unlink": a_unlink,
     "my_avatar": a_my_avatar, "prefs": a_prefs, "sales": a_sales, "erp_refresh": a_erp_refresh,
     "digest": a_digest, "digest_list": a_digest_list, "digest_save": a_digest_save, "digest_remove": a_digest_remove,
-    "digest_send": a_digest_send, "digest_cron": a_digest_cron,
+    "digest_send": a_digest_send, "digest_cron": a_digest_cron, "digest_catchup": a_digest_catchup,
 }
-DUGOUT_OK = {"boot", "items", "orders", "prefs", "sales", "erp_refresh", "digest"}  # The Dugout is view-only
-NO_USER = {"boot", "items", "sales", "erp_refresh", "digest_cron"}
+DUGOUT_OK = {"boot", "items", "orders", "prefs", "sales", "erp_refresh", "digest", "digest_catchup"}  # The Dugout is view-only
+NO_USER = {"boot", "items", "sales", "erp_refresh", "digest_cron", "digest_catchup"}
 
 
 class handler(BaseHTTPRequestHandler):
@@ -1616,10 +1672,8 @@ class handler(BaseHTTPRequestHandler):
         act = qs.get("a", "")
         db = None
         try:
-            if act == "digest_cron":  # Vercel Cron signs its call with CRON_SECRET
-                sec = os.environ.get("CRON_SECRET") or ""
-                if not sec or (self.headers.get("Authorization") or "") != "Bearer " + sec:
-                    raise ApiError(401, "Not allowed")
+            if act == "digest_cron":  # Vercel Cron signs its call with CRON_SECRET (checked, and recorded, in a_digest_cron)
+                pass
             elif norm_key(self.headers.get("X-Key")) != norm_key(os.environ.get("SITE_PASSWORD") or "Howzat?"):
                 raise ApiError(401, "Wrong team password — reload and sign in again")
             fn = ACTIONS.get(act)
@@ -1650,6 +1704,7 @@ class handler(BaseHTTPRequestHandler):
             else:
                 ctx = Ctx(db, who)
             ctx.host = self.headers.get("X-Forwarded-Host") or self.headers.get("Host") or ""
+            ctx.auth = self.headers.get("Authorization") or ""
             out = fn(ctx, qs, body)
             db.commit()
             self._send(200, out)
@@ -1662,6 +1717,7 @@ class handler(BaseHTTPRequestHandler):
                 db.rollback()
             self._send(500, {"error": "%s: %s" % (type(e).__name__, e)})
         finally:
+            _PG.at = time.time()
             _REQ.db = None
             if db:
                 db.close()

@@ -19,7 +19,7 @@ B.api = async function (a, body) {
   if (body) { opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(body); }
   const r = await fetch("/api/billing?a=" + a, opt);
   let j = {}; try { j = await r.json(); } catch (e) {}
-  if (!r.ok) { const err = new Error(j.error || ("Request failed (HTTP " + r.status + ")")); err.data = j; err.status = r.status; throw err; }
+  if (!r.ok) { const err = new Error(j.error || (r.status === 504 || r.status === 502 ? "The server took too long to answer — please wait a few seconds and try again." + (a === "order_save" ? " Check My orders first: if the order is listed, it was saved." : "") : "Request failed (HTTP " + r.status + ")")); err.data = j; err.status = r.status; throw err; }
   return j;
 };
 const isBE = () => !viewer() && B.who === "backend";
@@ -226,6 +226,18 @@ B.isBackend = isBE;
 B.isMgr = isMgr;
 
 /* ---------- item master ---------- */
+/* two SKUs with the same size in one product (e.g. men's / women's sizing M & W): tag each box with the letters that differ in the SKU */
+function sizeTags(g) {
+  const by = {}; g.skus.forEach(s => (by[s.size] = by[s.size] || []).push(s));
+  Object.values(by).forEach(L => {
+    if (L.length < 2) return;
+    const same = L.every(s => s.code.length === L[0].code.length);
+    L.forEach(s => {
+      const tag = same ? [...s.code].filter((ch, i) => L.some(o => o.code[i] !== ch)).join("") : s.code;
+      s.lab = s.size + " " + (tag || s.code);
+    });
+  });
+}
 B.loadItems = function () {
   if (!itemsP) itemsP = B.api("items").then(j => {
     ITEMS = j.items; ITEM = {}; GROUPS = {}; GLIST = [];
@@ -235,7 +247,7 @@ B.loadItems = function () {
       g.skus.push({ code, size: size || "-" });
       ITEM[code.toUpperCase()] = { code, name, style, col: fmtCol(col), size: size || "-", gk };
     });
-    GLIST.forEach(g => { g.skus.sort((a, b) => szCmp(a.size, b.size)); g.hay = (g.name + " " + g.col + " " + g.style + " " + g.grp + " " + g.skus.map(s => s.code).join(" ")).toLowerCase(); });
+    GLIST.forEach(g => { g.skus.sort((a, b) => szCmp(a.size, b.size) || a.code.localeCompare(b.code)); sizeTags(g); g.hay = (g.name + " " + g.col + " " + g.style + " " + g.grp + " " + g.skus.map(s => s.code).join(" ")).toLowerCase(); });
     GLIST.sort((a, b) => a.name.localeCompare(b.name) || a.col.localeCompare(b.col));
     return ITEMS;
   }).catch(e => { itemsP = null; throw e; });
@@ -410,7 +422,7 @@ function drawLines() {
   el.innerHTML = `<div class="scroll"><table class="ltbl"><thead><tr><th>Product</th><th>Sizes &amp; quantity</th><th class="num">Price / unit<br><span style="text-transform:none;letter-spacing:0;font-weight:500">incl. GST</span></th><th class="num">Units</th><th class="num">Value</th><th></th></tr></thead><tbody>
    ${ORD.groups.map(gk => { const g = groupOf(gk), p = grpPrice(g), [q, v] = grpTot(g);
      return `<tr data-g="${attr(gk)}"><td class="pcell"><b>${esc(g.name)}</b><div class="mut">${esc([g.col, g.style].filter(Boolean).join(" · "))}</div></td>
-      <td><div class="szs">${g.skus.map(s => { const l = ORD.lines[s.code]; return `<label class="sz ${l ? "has" : ""}" title="${attr(s.code)}"><span>${esc(s.size)}</span><input class="q" data-sku="${attr(s.code)}" inputmode="numeric" value="${l ? l.qty : ""}" autocomplete="off"></label>`; }).join("")}</div></td>
+      <td><div class="szs">${g.skus.map(s => { const l = ORD.lines[s.code]; return `<label class="sz ${l ? "has" : ""}" title="${attr(s.code)}"><span>${esc(s.lab || s.size)}</span><input class="q" data-sku="${attr(s.code)}" inputmode="numeric" value="${l ? l.qty : ""}" autocomplete="off"></label>`; }).join("")}</div></td>
       <td class="num"><div class="pin"><span>&#8377;</span><input class="pr" inputmode="decimal" value="${p === null ? "" : p}" placeholder="${p === null ? "mixed" : "0"}"></div></td>
       <td class="num tnum gq">${units(q)}</td><td class="num tnum gv">${money(v)}</td>
       <td><button class="rm" title="Remove product">&times;</button></td></tr>`; }).join("")}
@@ -500,7 +512,7 @@ function downloadTemplate() {
   ]); how["!cols"] = [{ wch: 100 }];
   XLSX.utils.book_append_sheet(wb, how, "How to fill");
   const cat = [["SKU Code", "Product", "Colour", "Size", "Style", "Category"]];
-  GLIST.forEach(g => g.skus.forEach(s => cat.push([s.code, g.name, g.col, s.size, g.style, g.grp])));
+  GLIST.forEach(g => g.skus.forEach(s => cat.push([s.code, g.name, g.col, s.lab || s.size, g.style, g.grp])));
   const cws = XLSX.utils.aoa_to_sheet(cat); cws["!cols"] = [{ wch: 18 }, { wch: 30 }, { wch: 28 }, { wch: 8 }, { wch: 12 }, { wch: 16 }];
   XLSX.utils.book_append_sheet(wb, cws, "Catalogue");
   XLSX.writeFile(wb, "TenXYou_Order_Template.xlsx");
@@ -574,7 +586,7 @@ function submitSummary(go) {
     <div class="prog"><div><span>Products</span><b class="tnum">${rows.length}</b></div><div><span>SKUs</span><b class="tnum">${N}</b></div><div><span>Units</span><b class="tnum">${units(Q)}</b></div><div style="flex:1.6"><span>Order value &#183; incl. GST</span><b class="tnum">${money(V)}</b></div></div>
     <h4>Product summary</h4>
     <div class="scroll"><table class="ltbl"><thead><tr><th>Product</th><th>Sizes &#215; quantity</th><th class="num">Units</th><th class="num">Price / unit</th><th class="num">Value</th><th class="num">Share</th></tr></thead><tbody>
-    ${rows.map(r => `<tr><td class="pcell"><b>${esc(r.g.name)}</b><div class="mut">${esc([r.g.col, r.g.style].filter(Boolean).join(" · "))}</div></td><td class="wrapc"><div class="szsum">${r.sz.map(x => `<span><b>${esc(x.size)}</b> &#215; ${units(ORD.lines[x.code].qty)}</span>`).join("")}</div></td><td class="num tnum">${units(r.q)}</td><td class="num tnum">${r.p === null ? '<span class="mut">mixed</span>' : money(r.p)}</td><td class="num tnum">${money(r.v)}</td><td class="num tnum mut">${V ? (r.v / V * 100).toFixed(0) : 0}%</td></tr>`).join("")}
+    ${rows.map(r => `<tr><td class="pcell"><b>${esc(r.g.name)}</b><div class="mut">${esc([r.g.col, r.g.style].filter(Boolean).join(" · "))}</div></td><td class="wrapc"><div class="szsum">${r.sz.map(x => `<span><b>${esc(x.lab || x.size)}</b> &#215; ${units(ORD.lines[x.code].qty)}</span>`).join("")}</div></td><td class="num tnum">${units(r.q)}</td><td class="num tnum">${r.p === null ? '<span class="mut">mixed</span>' : money(r.p)}</td><td class="num tnum">${money(r.v)}</td><td class="num tnum mut">${V ? (r.v / V * 100).toFixed(0) : 0}%</td></tr>`).join("")}
     </tbody><tfoot><tr><td>Total</td><td class="mut" style="font-weight:500">${rows.length} product${rows.length === 1 ? "" : "s"} &#183; ${N} SKU${N === 1 ? "" : "s"}</td><td class="num tnum">${units(Q)}</td><td></td><td class="num tnum">${money(V)}</td><td></td></tr></tfoot></table></div>
     <div class="lockbox"><span class="lk">&#128274;</span><div><b>Once placed, this order can only be changed or cancelled by the backend team.</b><br><span class="mut">Check the dealer, sizes, quantities and prices now${isBE() ? "." : " &#8212; after you place it, any change has to go through the backend team."}</span></div></div>
    </div>
@@ -1187,7 +1199,10 @@ B.renderEmail = async function (host) {
           <li>Open <b>myaccount.google.com/apppasswords</b> &#8594; create one named &#8220;Offline sales email&#8221; &#8594; copy the 16-letter password.</li>
           <li>Vercel &#8594; this project &#8594; Settings &#8594; Environment Variables: add <b>GMAIL_USER</b> (the email address), <b>GMAIL_APP_PASSWORD</b> (the 16 letters) and <b>CRON_SECRET</b> (any long random text).</li>
           <li>Vercel &#8594; Deployments &#8594; &#8943; on the latest &#8594; <b>Redeploy</b>. Then come back here and press <b>Send test</b>.</li></ol></details>`;
-    const lastTxt = last ? (last.ok ? `Last sent ${dLong(last.at)} &#183; ${shortDate(last.day)} summary to ${last.to} ${last.to === 1 ? "person" : "people"}` : `<span class="neg">Last attempt ${dLong(last.at)} failed: ${esc(last.error || "")}</span>`) : "Not sent yet.";
+    const by = last && last.by ? ` (${esc(last.by)})` : "";
+    const lastTxt = (last ? (last.ok ? `Last sent ${dLong(last.at)}${by} &#183; ${shortDate(last.day)} summary to ${last.to} ${last.to === 1 ? "person" : "people"}` : `<span class="neg">Last attempt ${dLong(last.at)}${by} failed: ${esc(last.error || "")}</span>`) : "Not sent yet.")
+      + ` &#183; 9 AM schedule last ran: ${R.hit ? dLong(R.hit.at) + (R.hit.auth ? "" : ' <span class="neg">(refused &#8212; CRON_SECRET does not match)</span>') : "never recorded"}`
+      + `<br>If the 9 AM email hasn't gone out, it is sent automatically the first time anyone opens the app after 10 AM.`;
     const row = r => st.edit === r.id
       ? `<tr data-row="${r.id}"><td><input data-nm value="${attr(r.name)}" placeholder="Name (optional)"></td><td><input data-em type="email" value="${attr(r.email)}"></td>
           <td class="acts"><button class="btn primary sm" data-sv="${r.id}">Save</button> <button class="btn ghost sm" data-cx>Cancel</button></td></tr>`

@@ -325,7 +325,7 @@ body.rzing,body.rzing *{cursor:col-resize!important;user-select:none!important;}
   <div class="section" data-sec="b-daily" hidden><div id="b-daily"></div></div>
 </div>
 <div id="modal-root"></div>
-<script src="billing.js?v=20261008204747"></script>
+<script src="billing.js?v=20261014221246"></script>
 <script>
 let DATA=null,BOOT=null;
 let TEAM,COLOURS,ASSIGN,TEAMID,TODAY,MONTH_START,YEAR_MIN;
@@ -707,6 +707,7 @@ async function startApp(){
  const m=BILL.mode(),ok=BILL.whoValid();
  if(!m)BILL.renderMode(enterApp);else if(m==="billing"&&!ok)BILL.renderWho(enterApp);else enterApp();
  if(DATA.stale)setTimeout(bgRefresh,300);
+ if(new Date().getHours()>=10)setTimeout(()=>{BILL.api("digest_catchup").catch(()=>{});},4000); /* safety net if the 9 AM email didn't go */
 }
 
 /* site password gate — Howzat? (checked by the server) */
