@@ -84,7 +84,8 @@ def norm_name(s):
 
 
 # ---------------------------------------------------------------- database
-_PG = threading.local()  # one connection per worker thread, kept open while the function instance stays warm
+_POOL, _POOL_LOCK = [], threading.Lock()  # idle connections [(conn, last_used)], shared by the instance's request threads
+_BOOT, _NREQ = time.time(), [0]  # for the timing readout
 
 
 def _pg_connect():
@@ -102,19 +103,23 @@ PG_IDLE = 120  # seconds: after this long unused, open a fresh connection (Neon 
 class DB:
     def __init__(self):
         self.pg = bool(DB_URL)
-        self.used = False
+        self.used, self.nq, self.tq, self.tc, self.reused = False, 0, 0.0, 0.0, False
         if self.pg:
-            old = getattr(_PG, "conn", None)
-            if old is not None and time.time() - getattr(_PG, "at", 0) > PG_IDLE:
-                try:
-                    old.close()
-                except Exception:
-                    pass
-                old = _PG.conn = None
-            if old is None:
-                _PG.conn = _pg_connect()
-            _PG.at = time.time()
-            self.conn = _PG.conn
+            self.conn = None
+            with _POOL_LOCK:
+                while _POOL:
+                    c, at = _POOL.pop()
+                    if time.time() - at <= PG_IDLE:
+                        self.conn, self.reused = c, True
+                        break
+                    try:
+                        c.close()
+                    except Exception:
+                        pass
+            if self.conn is None:
+                t = time.time()
+                self.conn = _pg_connect()
+                self.tc = time.time() - t
         else:
             if os.environ.get("VERCEL"):
                 raise ApiError(503, "Database not connected — in Vercel open Storage → Create Database → Neon → Connect to project, then Redeploy")
@@ -122,6 +127,14 @@ class DB:
             self.conn = sqlite3.connect(LOCAL_DB)
 
     def q(self, sql, params=()):
+        t = time.time()
+        try:
+            return self._q(sql, params)
+        finally:
+            self.nq += 1
+            self.tq += time.time() - t
+
+    def _q(self, sql, params=()):
         if self.pg:
             sql = sql.replace("?", "%s")
             if not self.used:  # a kept-open connection may have been dropped (e.g. Neon idled) — reconnect once
@@ -137,7 +150,10 @@ class DB:
                         self.conn.close()
                     except Exception:
                         pass
-                    _PG.conn = self.conn = _pg_connect()
+                    t = time.time()
+                    self.conn = _pg_connect()
+                    self.tc += time.time() - t
+                    self.reused = False
                     cur = self.conn.cursor()
                     cur.execute(sql, tuple(params))
                 return self._rows(cur)
@@ -169,12 +185,16 @@ class DB:
     def close(self):
         try:
             if self.pg:
-                self.conn.rollback()  # leave the shared connection clean for the next request
+                self.conn.rollback()  # leave the connection clean for the next request
+                with _POOL_LOCK:
+                    if len(_POOL) < 4:
+                        _POOL.append((self.conn, time.time()))
+                        return
+                self.conn.close()
             else:
                 self.conn.close()
         except Exception:
-            if self.pg:
-                _PG.conn = None
+            pass
 
 
 def ph(n):
@@ -1107,8 +1127,11 @@ def a_order_save(ctx, qs, body):
         ctx.log(oid, "Order created" + (" and submitted to billing" if submit else " as draft"))
     if ov_json and (not cur or cur.get("dealer_ov") != ov_json):
         ctx.log(oid, "Dealer details edited for this order only")
-    for m in merged.values():
-        db.q("INSERT INTO order_lines (order_id, sku, qty, price) VALUES (?,?,?,?)", (oid, m["sku"], m["qty"], m["price"]))
+    ml = list(merged.values())
+    for i in range(0, len(ml), 200):  # one round trip per 200 lines instead of one per line
+        part = ml[i:i + 200]
+        db.q("INSERT INTO order_lines (order_id, sku, qty, price) VALUES " + ",".join(["(?,?,?,?)"] * len(part)),
+             [x for m in part for x in (oid, m["sku"], m["qty"], m["price"])])
     o = db.one("SELECT ref, status FROM orders WHERE id = ?", (oid,))
     return {"id": oid, "ref": o["ref"], "status": o["status"], "unknown": sorted(set(unknown))}
 
@@ -1651,7 +1674,7 @@ class handler(BaseHTTPRequestHandler):
     def do_POST(self):
         self._run("POST")
 
-    def _send(self, code, obj):
+    def _send(self, code, obj, timing=None):
         body = json.dumps(obj, ensure_ascii=False, default=str, separators=(",", ":")).encode("utf-8")
         gz = len(body) > 1500 and "gzip" in (self.headers.get("Accept-Encoding") or "")
         if gz:
@@ -1661,12 +1684,27 @@ class handler(BaseHTTPRequestHandler):
             self.send_header("Content-Encoding", "gzip")
             self.send_header("Vary", "Accept-Encoding")
         self.send_header("Content-Length", str(len(body)))
+        if timing:
+            self.send_header("Server-Timing", timing[0])
+            if timing[1]:
+                self.send_header("X-Diag", timing[1])
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
 
+    def _timing(self, db, who):
+        tot = (time.time() - self._t0) * 1000
+        st = "total;dur=%.0f, connect;dur=%.0f, db;dur=%.0f" % (tot, db.tc * 1000, db.tq * 1000)
+        if who != "backend":
+            return st, ""
+        host = urllib.parse.urlparse(DB_URL).hostname or "" if DB_URL else "sqlite"
+        return st, "queries=%d; reused=%s; instance_age=%.0fs; request_no=%d; fn_region=%s; db_region=%s" % (
+            db.nq, db.reused, time.time() - _BOOT, _NREQ[0], os.environ.get("VERCEL_REGION", "?"), host.split(".", 1)[-1])
+
     def _run(self, method):
+        self._t0 = time.time()
+        _NREQ[0] += 1
         u = urllib.parse.urlparse(self.path)
         qs = dict(urllib.parse.parse_qsl(u.query))
         act = qs.get("a", "")
@@ -1707,7 +1745,7 @@ class handler(BaseHTTPRequestHandler):
             ctx.auth = self.headers.get("Authorization") or ""
             out = fn(ctx, qs, body)
             db.commit()
-            self._send(200, out)
+            self._send(200, out, self._timing(db, who))
         except ApiError as e:
             if db:
                 db.rollback()
@@ -1717,7 +1755,6 @@ class handler(BaseHTTPRequestHandler):
                 db.rollback()
             self._send(500, {"error": "%s: %s" % (type(e).__name__, e)})
         finally:
-            _PG.at = time.time()
             _REQ.db = None
             if db:
                 db.close()

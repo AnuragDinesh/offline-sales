@@ -825,6 +825,18 @@ function exportOrders(list, kind, title) {
 }
 
 /* ---------- order detail ---------- */
+const LF = [["all", "All lines", l => true], ["pending", "Pending", l => l.pending > 0], ["billed", "Billed", l => l.billed > 0]];
+const LSUM = (rs, k) => units(rs.reduce((t, l) => t + (l[k] || 0), 0));
+const LCOLS = [
+  { k: "name", h: "Product", w: 130, sv: l => l.it.name.toLowerCase(), td: l => esc(l.it.name), ft: rs => `<b>${rs.length} line${rs.length === 1 ? "" : "s"}</b>` },
+  { k: "col", h: "Colour", w: 130, sv: l => l.it.col.toLowerCase(), td: l => esc(l.it.col) },
+  { k: "size", h: "Size", w: 80, sv: l => l.it.size, td: l => esc(l.it.size) },
+  { k: "sku", h: "SKU", w: 115, sv: l => l.sku, td: l => `<span class="mut">${esc(l.sku)}</span>` },
+  { k: "qty", h: "Ordered", num: true, w: 112, sv: l => l.qty, td: l => units(l.qty), ft: rs => `<b>${LSUM(rs, "qty")}</b>` },
+  { k: "price", h: "Price", num: true, w: 82, sv: l => l.price, td: l => money(l.price) },
+  { k: "billed", h: "Billed", num: true, w: 88, sv: l => l.billed, td: l => units(l.billed), ft: rs => `<b>${LSUM(rs, "billed")}</b>` },
+  { k: "pending", h: "Pending", num: true, w: 105, sv: l => l.pending, td: l => `<span class="${l.pending ? "wtxt" : ""}">${units(l.pending)}</span>${l.short_closed ? ` <span class="mut">(${units(l.short_closed)} closed)</span>` : ""}`, ft: rs => `<b class="wtxt">${LSUM(rs, "pending")}</b>` },
+  { k: "pv", h: "&#8377; Pending", num: true, w: 118, sv: l => l.pending * l.price, td: l => l.pending ? money(l.pending * l.price) : '<span class="mut">&#8212;</span>', ft: rs => `<b>${money(rs.reduce((t, l) => t + l.pending * l.price, 0))}</b>` }];
 async function openOrder(id) {
   const o = ORDERS && ORDERS.find(x => x.id === id); if (!o) return;
   try { await B.loadItems(); } catch (e) {}
@@ -832,7 +844,7 @@ async function openOrder(id) {
   const lines = o.lines.map(l => Object.assign({}, l, { it: item(l.sku) })).sort((a, b) => a.it.name.localeCompare(b.it.name) || a.it.col.localeCompare(b.it.col) || szCmp(a.it.size, b.it.size));
   const ro = viewer() || isMgr();
   const editable = !ro && (isBE() ? (o.status === "draft" || o.status === "submitted") : (!o.sheet_at && o.status === "draft" && o.team_id === meId()));
-  const acts = [];
+  const acts = [`<button class="btn ghost" data-a="csv" title="This order's lines as a CSV file">&#8595; Download CSV</button>`];
   if (editable) acts.push(`<button class="btn ghost" data-a="edit">Edit order</button>`);
   const canCancel = !ro && o.stage !== "cancelled" && (isBE() ? o.stage !== "billed" : o.status === "draft");
   if (canCancel) acts.push(`<button class="btn ghost danger" data-a="cancel">${o.links.length ? "Cancel full order" : "Cancel order"}</button>`);
@@ -853,10 +865,8 @@ async function openOrder(id) {
      ${o.closed_at ? `<div class="kv" style="grid-column:1/-1"><span>Pending closed</span><b style="font-weight:500">${esc(o.close_reason || "")} &#8212; ${esc(o.closed_by || "")}, ${dLong(o.closed_at)} (${units(t.cq)} units)</b></div>` : ""}
     </div>
     <div class="prog"><div><span>Ordered</span><b class="tnum">${units(t.oq)}</b><i class="tnum">${money(t.ov)}</i></div><div><span>Billed${t.eq ? ` <span class="wtxt">(${units(t.eq)} extra*)</span>` : ""}</span><b class="tnum">${units(t.bq + (t.eq || 0))}</b><i class="tnum">${money(t.bvo + (t.ev || 0))}</i></div><div><span>Pending</span><b class="tnum ${t.pq ? "wtxt" : ""}">${units(t.pq)}</b><i class="tnum">${money(t.pv)}</i></div>${t.cq ? `<div><span>${o.stage === "cancelled" ? "Cancelled" : "Short-closed"}</span><b class="tnum">${units(t.cq)}</b><i class="tnum">${money(t.cv)}</i></div>` : ""}<div style="flex:2;min-width:160px"><span>Fill rate (value) &#183; ${pct.toFixed(0)}%</span><div class="fill big"><span style="width:${pct}%"></span></div></div></div>${t.eq ? `<div class="tblnote" style="margin:4px 0 12px">* Extra = units billed in ERP that were not in the original order (substitutions or add-ons).</div>` : ""}
-    <h4>Order lines</h4>
-    <div class="scroll"><table class="ltbl"><thead><tr><th>Product</th><th>Colour</th><th>Size</th><th>SKU</th><th class="num">Ordered</th><th class="num">Price</th><th class="num">Billed</th><th class="num">Pending</th></tr></thead><tbody>
-     ${lines.map(l => `<tr><td>${esc(l.it.name)}</td><td>${esc(l.it.col)}</td><td>${esc(l.it.size)}</td><td class="mut">${esc(l.sku)}</td><td class="num tnum">${units(l.qty)}</td><td class="num tnum">${money(l.price)}</td><td class="num tnum">${units(l.billed)}</td><td class="num tnum ${l.pending ? "wtxt" : ""}">${units(l.pending)}${l.short_closed ? ` <span class="mut">(${units(l.short_closed)} closed)</span>` : ""}</td></tr>`).join("") || '<tr><td colspan="8" class="bempty">No lines.</td></tr>'}
-    </tbody></table></div>
+    <div class="lhead"><h4>Order lines</h4><div class="seg" data-lf>${LF.map(f => `<button data-lf="${f[0]}">${f[1]}<span class="fc">${lines.filter(f[2]).length}</span></button>`).join("")}</div></div>
+    <div class="scroll" data-lines></div>
     ${o.extras.length ? `<h4 class="wtxt">Billed in ERP but not in this order <span class="mut" style="font-weight:500">&#8212; ${units(t.eq)} units (substitutions or extras)</span></h4>
      <div class="scroll"><table class="ltbl"><thead><tr><th>Product</th><th>Colour</th><th>Size</th><th>SKU</th><th class="num">Qty</th><th class="num">Rate</th><th>ERP order ID</th></tr></thead><tbody>
      ${o.extras.map(x => { const it = item(x.sku); return `<tr><td>${esc(it.name)}</td><td>${esc(it.col)}</td><td>${esc(it.size)}</td><td class="mut">${esc(x.sku)}</td><td class="num tnum">${units(x.qty)}</td><td class="num tnum">${money(x.rate)}</td><td>${esc(x.no)}</td></tr>`; }).join("")}</tbody></table></div>` : ""}
@@ -868,11 +878,22 @@ async function openOrder(id) {
     <h4>Activity</h4><div class="evts">${o.events.slice().reverse().map(e => `<div><span class="mut tnum">${dLong(e.at)}</span> &#183; <b>${esc(e.who)}</b> &#8212; ${esc(e.what)}</div>`).join("") || '<div class="mut">—</div>'}</div>
    </div>
    <div class="mf"><span>${!ro && !isBE() && o.status === "submitted" && o.stage !== "cancelled" ? "&#128274; Placed orders can only be changed or cancelled by the backend team." : ""}</span><div class="hbtns">${acts.join("")}</div></div>`, { wide: true });
+  let lf = t.bq > 0 && t.pq > 0 ? "pending" : "all";  // partly billed: open on what's still to bill
+  const drawLines = () => {
+    const f = LF.find(x => x[0] === lf), rows = gSort("olines", LCOLS, lines.filter(f[2]));
+    m.querySelectorAll("[data-lf] button").forEach(b => b.classList.toggle("on", b.dataset.lf === lf));
+    const host = m.querySelector("[data-lines]");
+    host.innerHTML = gTable("olines", LCOLS, rows, { cls: "ltbl", foot: rows, empty: lf === "pending" ? "Nothing pending on this order." : "No lines." });
+    gWire(host, "olines", LCOLS, drawLines);
+  };
+  m.querySelectorAll("[data-lf] button").forEach(b => b.onclick = () => { lf = b.dataset.lf; drawLines(); });
+  drawLines();
   const after = async (msg) => { ORDERS = null; await ensureOrders(true); toast(msg, "ok"); refresh(); openOrder(id); };
   m.querySelectorAll("[data-a]").forEach(b => b.onclick = async () => {
     const a = b.dataset.a;
     try {
-      if (a === "edit") editOrder(o);
+      if (a === "csv") orderCSV(o, lines);
+      else if (a === "edit") editOrder(o);
       else if (a === "sheet") openSheet([o.id]);
       else if (a === "link") openLink(o.id);
       else if (a === "close") openClose(o);
@@ -884,6 +905,14 @@ async function openOrder(id) {
     if (!confirm("Unlink ERP order " + b.dataset.unlink + " from " + o.ref + "?")) return;
     try { await B.api("unlink", { order_id: o.id, no: b.dataset.unlink }); await after("Unlinked " + b.dataset.unlink); } catch (e) { toast(e.message, "err"); }
   });
+}
+
+function orderCSV(o, lines) {  // one order, one row per SKU line; downloading doesn't change the order's status
+  const st = o.ship_to || {}, sub = (o.submitted_at || o.created_at || "").slice(0, 10);
+  const head = ["Order", "Date", "Dealer", "Team member", "Entered by", "Status", "Ship to", "GSTIN", "Remarks", "Product", "Colour", "Size", "SKU", "Ordered", "Price", "Value", "Billed", "Pending"];
+  const rows = lines.map(l => [o.ref, sub, o.dealer, o.team || "", o.created_by || "", (STG[o.stage] || [o.stage])[0], [st.label, st.text].filter(Boolean).join(" - "), st.gstin || "", o.remarks || "",
+    l.it.name, l.it.col, l.it.size, l.sku, l.qty, l.price, Math.round(l.qty * l.price), l.billed, l.pending]);
+  downloadCSV(o.ref + " " + o.dealer, head, rows);
 }
 
 function cancelBox(o) {
