@@ -846,11 +846,11 @@ async function openOrder(id) {
   const editable = !ro && (isBE() ? (o.status === "draft" || o.status === "submitted") : (!o.sheet_at && o.status === "draft" && o.team_id === meId()));
   const acts = [`<button class="btn ghost" data-a="csv" title="This order's lines as a CSV file">&#8595; Download CSV</button>`];
   if (editable) acts.push(`<button class="btn ghost" data-a="edit">Edit order</button>`);
-  const canCancel = !ro && o.stage !== "cancelled" && (isBE() ? o.stage !== "billed" : o.status === "draft");
+  const canCancel = !ro && o.stage !== "cancelled" && (isBE() ? true : o.status === "draft");
   if (canCancel) acts.push(`<button class="btn ghost danger" data-a="cancel">${o.links.length ? "Cancel full order" : "Cancel order"}</button>`);
   if (isBE()) {
     if (o.status === "submitted" && !o.closed_at) acts.push(`<button class="btn ${o.stage === "tobill" ? "primary" : "ghost"}" data-a="sheet">${o.sheet_at ? "Re-download billing sheet" : "Create billing sheet"}</button>`);
-    if (o.status === "submitted" && !o.closed_at && o.sheet_at) acts.push(`<button class="btn primary" data-a="link">+ Link ERP order ID</button>`);
+    if (o.status === "submitted" && !o.closed_at) acts.push(`<button class="btn ${o.sheet_at ? "primary" : "ghost"}" data-a="link" ${o.sheet_at ? "" : 'title="For orders keyed in ERP directly: link the DN number"'}>+ Link order ID / DN</button>`);
     if (o.closed_at) acts.push(`<button class="btn ghost" data-a="reopen">Reopen pending</button>`);
     else if (o.links.length && t.pq > 0) acts.push(`<button class="btn ghost" data-a="close">Close pending&#8230;</button>`);
   }
@@ -871,10 +871,10 @@ async function openOrder(id) {
      <div class="scroll"><table class="ltbl"><thead><tr><th>Product</th><th>Colour</th><th>Size</th><th>SKU</th><th class="num">Qty</th><th class="num">Rate</th><th>ERP order ID</th></tr></thead><tbody>
      ${o.extras.map(x => { const it = item(x.sku); return `<tr><td>${esc(it.name)}</td><td>${esc(it.col)}</td><td>${esc(it.size)}</td><td class="mut">${esc(x.sku)}</td><td class="num tnum">${units(x.qty)}</td><td class="num tnum">${money(x.rate)}</td><td>${esc(x.no)}</td></tr>`; }).join("")}</tbody></table></div>` : ""}
     <h4>Linked ERP orders</h4>
-    ${o.links.length ? `<div class="scroll"><table class="ltbl"><thead><tr><th>Order ID</th><th>ERP Sales Order</th><th>Customer in ERP</th><th>Date</th><th>ERP status</th><th class="num">Units</th><th class="num">Value</th><th>Notes</th>${isBE() && !ro ? "<th></th>" : ""}</tr></thead><tbody>
+    ${o.links.length ? `<div class="scroll"><table class="ltbl"><thead><tr><th>Order ID / DN</th><th>ERP document</th><th>Customer in ERP</th><th>Date</th><th>ERP status</th><th class="num">Units</th><th class="num">Value</th><th>Notes</th>${isBE() && !ro ? "<th></th>" : ""}</tr></thead><tbody>
      ${o.links.map(l => `<tr><td><b>${esc(l.no)}</b></td><td>${l.found ? esc(l.so) : '<span class="neg">not found</span>'}</td><td>${esc(l.customer || "")}</td><td>${dShort(l.date)}</td><td>${l.cancelled ? '<span class="neg">Cancelled</span>' : esc(l.status || "")}</td><td class="num tnum">${units(l.qty)}</td><td class="num tnum">${money(l.amount)}</td>
        <td class="ncell">${(l.flags || []).map(f => `<div class="wtxt">&#9888; ${esc(f)}</div>`).join("")}${l.shared_with.length ? `<div class="mut">Shared with ${esc(l.shared_with.join(", "))}</div>` : ""}${l.note ? `<div>${esc(l.note)}</div>` : ""}<div class="mut">by ${esc(l.linked_by || "")}, ${dLong(l.linked_at)}</div></td>
-       ${isBE() ? `<td><button class="lnk" data-unlink="${attr(l.no)}">Unlink</button></td>` : ""}</tr>`).join("")}</tbody></table></div>` : `<div class="tblnote">None yet. ${o.sheet_at ? "Once the sheet is uploaded, the backend team enters the ERP order ID here." : "Billing creates the sheet first."}</div>`}
+       ${isBE() ? `<td><button class="lnk" data-unlink="${attr(l.no)}">Unlink</button></td>` : ""}</tr>`).join("")}</tbody></table></div>` : `<div class="tblnote">None yet. ${o.sheet_at ? "Once the sheet is uploaded, the backend team enters the ERP order ID here." : "Billing creates the sheet first &#8212; or, if the order was keyed in ERP directly, link its DN number."}</div>`}
     <h4>Activity</h4><div class="evts">${o.events.slice().reverse().map(e => `<div><span class="mut tnum">${dLong(e.at)}</span> &#183; <b>${esc(e.who)}</b> &#8212; ${esc(e.what)}</div>`).join("") || '<div class="mut">—</div>'}</div>
    </div>
    <div class="mf"><span>${!ro && !isBE() && o.status === "submitted" && o.stage !== "cancelled" ? "&#128274; Placed orders can only be changed or cancelled by the backend team." : ""}</span><div class="hbtns">${acts.join("")}</div></div>`, { wide: true });
@@ -902,7 +902,7 @@ async function openOrder(id) {
     } catch (e) { toast(e.message, "err"); }
   });
   m.querySelectorAll("[data-unlink]").forEach(b => b.onclick = async () => {
-    if (!confirm("Unlink ERP order " + b.dataset.unlink + " from " + o.ref + "?")) return;
+    if (!confirm("Unlink " + b.dataset.unlink + " from " + o.ref + "?")) return;
     try { await B.api("unlink", { order_id: o.id, no: b.dataset.unlink }); await after("Unlinked " + b.dataset.unlink); } catch (e) { toast(e.message, "err"); }
   });
 }
@@ -925,7 +925,10 @@ const CX_REASONS = ["Dealer cancelled the order", "Out of stock", "Credit / paym
 function openCancel(o) {
   const t = o.tot;
   const m = modal(`<div class="mh"><h3>Cancel ${esc(o.ref)}</h3><button data-close>&times;</button></div>
-   <div class="mbody"><p style="margin-top:0">${o.links.length ? `<b>${units(t.bq)} units</b> already billed in ERP stay billed there; the <b>${units(t.pq)} pending units</b> will no longer be pending.` : `The whole order &#8212; ${units(t.oq)} units, ${money(t.ov)} &#8212; will be cancelled.`} The reason shows on the order for the sales person and the Dugout.</p>
+   <div class="mbody"><p style="margin-top:0">${o.links.length ? `This order is linked to ERP (${o.links.map(l => esc(l.no)).join(", ")}) &#8212; <b>${units(t.bq + (t.eq || 0))} units billed</b>${t.pq ? `, ${units(t.pq)} pending (they will no longer be pending)` : ""}.` : `The whole order &#8212; ${units(t.oq)} units, ${money(t.ov)} &#8212; will be cancelled.`} The reason shows on the order for the sales person and the Dugout.</p>
+    ${o.links.length ? `<div style="margin:6px 0 14px"><div style="font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:6px">What about the units already billed? <b class="req">*</b></div>
+     <label class="cxu"><input type="radio" name="cx-u" value="0"> <span><b>Keep them counted as billed</b> &#8212; the goods went to the dealer; only the order is closed.</span></label>
+     <label class="cxu"><input type="radio" name="cx-u" value="1"> <span><b>Remove them</b> &#8212; unlink the ERP order IDs / DNs so these units no longer count as billed (e.g. ERP order cancelled, goods returned or a wrong link). Nothing changes in ERP.</span></label></div>` : ""}
     <label class="field"><span>Why is it being cancelled? <b class="req">*</b></span><select id="cx-r"><option value="">Select a reason&#8230;</option>${CX_REASONS.map(r => `<option>${esc(r)}</option>`).join("")}<option value="__o">Other&#8230;</option></select></label>
     <label class="field"><span>Details <i id="cx-ti">optional</i></span><input id="cx-t" placeholder="e.g. dealer asked to hold till next season"></label></div>
    <div class="mf"><span></span><div class="hbtns"><button class="btn ghost" data-close>Back</button><button class="btn primary" id="cx-go">Cancel order</button></div></div>`);
@@ -936,9 +939,11 @@ function openCancel(o) {
     const other = sel.value === "__o", d = det.value.trim();
     if (!sel.value) { toast("Pick the reason for cancelling", "err"); sel.focus(); return; }
     if (other && !d) { toast("Write the reason in Details", "err"); det.focus(); return; }
+    const u = m.querySelector('[name="cx-u"]:checked');
+    if (o.links.length && !u) { toast("Choose what happens to the billed units", "err"); return; }
     const r = other ? d : [sel.value, d].filter(Boolean).join(" — ");
     e.target.disabled = true;
-    try { await B.api("order_cancel", { id: o.id, reason: r }); ORDERS = null; await ensureOrders(true); refresh(); openOrder(o.id); toast(o.ref + " cancelled", "ok"); }
+    try { await B.api("order_cancel", { id: o.id, reason: r, unlink: !!(u && u.value === "1") }); ORDERS = null; await ensureOrders(true); refresh(); openOrder(o.id); toast(o.ref + " cancelled", "ok"); }
     catch (er) { e.target.disabled = false; toast(er.message, "err"); }
   };
 }
@@ -972,9 +977,10 @@ function openSheet(ids) {
 /* ---------- link ERP order IDs ---------- */
 function openLink(id) {
   const o = ORDERS.find(x => x.id === id); if (!o) return;
-  const m = modal(`<div class="mh"><h3>Link ERP order ID &#183; ${esc(o.ref)}</h3><button data-close>&times;</button></div>
+  const m = modal(`<div class="mh"><h3>Link to ERP &#183; ${esc(o.ref)}</h3><button data-close>&times;</button></div>
    <div class="mbody"><p class="mut" style="margin-top:0">${esc(o.dealer)} &#183; ${units(o.tot.oq)} units ordered${o.links.length ? " &#183; already linked: " + o.links.map(l => esc(l.no)).join(", ") : ""}</p>
-    <label class="field"><span>Front-end order ID(s) &#8212; one or more, separated by comma, space or new line</span><textarea id="lk-in" rows="3" placeholder="e.g. 90378, 90391"></textarea></label>
+    <label class="field"><span>Front-end order ID(s) or Delivery Note (DN) number(s) &#8212; one or more, separated by comma, space or new line</span><textarea id="lk-in" rows="3" placeholder="e.g. 90378, 90391 or DN-26-101848"></textarea></label>
+    <div class="mut" style="font-size:12px;margin:-4px 0 8px">Use the DN number when the order was keyed in ERP directly and has no front-end order ID. Use one or the other for the same shipment, not both.</div>
     <div style="text-align:right"><button class="btn" id="lk-chk">Check in ERP</button></div>
     <div id="lk-res"></div></div>
    <div class="mf"><span id="lk-msg"></span><div class="hbtns"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="lk-go" disabled>Link</button></div></div>`);
@@ -989,7 +995,7 @@ function openLink(id) {
       const r = await B.api("link_check", { order_id: id, numbers: inp.value });
       okNos = r.results.filter(x => !x.errors.length).map(x => x.no); warn = r.results.some(x => !x.errors.length && x.warnings.length);
       res.innerHTML = `${r.invalid.length ? `<div class="wbox" style="margin-top:12px">Ignored &#8212; not valid order IDs: <b>${r.invalid.map(esc).join(", ")}</b></div>` : ""}
-       ${r.results.length ? `<div class="scroll" style="margin-top:12px"><table class="ltbl"><thead><tr><th>Order ID</th><th>ERP Sales Order</th><th>Customer in ERP</th><th>Date</th><th class="num">Units</th><th class="num">Value</th><th>Check</th></tr></thead><tbody>
+       ${r.results.length ? `<div class="scroll" style="margin-top:12px"><table class="ltbl"><thead><tr><th>Order ID / DN</th><th>ERP document</th><th>Customer in ERP</th><th>Date</th><th class="num">Units</th><th class="num">Value</th><th>Check</th></tr></thead><tbody>
        ${r.results.map(x => `<tr><td><b>${esc(x.no)}</b></td><td>${esc(x.so || "")}</td><td>${esc(x.customer || "")}</td><td>${dShort(x.date)}</td><td class="num tnum">${x.found ? units(x.qty) : ""}</td><td class="num tnum">${x.found ? money(x.amount) : ""}</td>
          <td class="ncell">${x.errors.map(er => `<div class="neg">&#10007; ${esc(er)}</div>`).join("")}${x.warnings.map(w => `<div class="wtxt">&#9888; ${esc(w)}</div>`).join("")}${!x.errors.length && !x.warnings.length ? '<span class="ptxt">&#10003; OK</span>' : ""}</td></tr>`).join("")}</tbody></table></div>` : ""}
        ${warn ? `<div class="wbox" style="margin-top:12px"><label class="chk" style="white-space:normal"><input type="checkbox" id="lk-cf"> I've checked the exceptions above and confirm these ERP orders belong to ${esc(o.ref)}.</label><input id="lk-note" class="tsearch" style="width:100%;margin-top:8px" placeholder="Note for the record (e.g. 'one ERP order for B2B-1004 + B2B-1005, confirmed with Ravi')"></div>` : ""}`;

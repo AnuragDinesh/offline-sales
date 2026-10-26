@@ -61,6 +61,12 @@ GST_STATES = {
 GSTIN_RE = re.compile(r"^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$")
 COUNTRY_RE = re.compile(r"^[A-Z]{2}$")
 ORDER_NO_RE = re.compile(r"^\d{4,7}$")
+DN_RE = re.compile(r"^DN-\d{2}-\d{3,8}$", re.I)  # ERP Delivery Note, for orders keyed in ERP without a front-end order ID
+DEAD = ("Cancelled", "Return")  # ERP documents that don't count as billed
+
+
+def is_dn(no):
+    return bool(DN_RE.match(str(no or "")))
 
 
 class ApiError(Exception):
@@ -204,7 +210,7 @@ def ph(n):
 _SCHEMA_OK = False
 
 
-SCHEMA_V = "2026-10-08b"  # bump when ensure_schema gains a table / column
+SCHEMA_V = "2026-10-26"  # bump when ensure_schema gains a table / column
 
 
 def ensure_schema(db):
@@ -255,7 +261,7 @@ def ensure_schema(db):
                             ("dealers", "is_intl", "INTEGER DEFAULT 0"), ("dealers", "country", "TEXT"),
                             ("dealers", "ship_addrs", "TEXT"), ("team_members", "avatar", "TEXT"),
                             ("orders", "cancel_reason", "TEXT"), ("orders", "cancelled_by", "TEXT"), ("orders", "cancelled_at", "TEXT"),
-                            ("erp_lines", "erp_row", "TEXT")):
+                            ("erp_lines", "erp_row", "TEXT"), ("erp_fetch", "info", "TEXT")):
         if db.pg:
             db.q("ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s %s" % (table, col, typ))
         elif col not in {r["name"] for r in db.q("PRAGMA table_info(%s)" % table)}:
@@ -327,11 +333,35 @@ def sku_map():
 
 
 def erp_refresh(db, nos):
-    """Pull the B2B Sales Orders for these front-end order numbers and snapshot their lines."""
+    """Pull the B2B Sales Orders for these front-end order numbers (and Delivery Notes for DN numbers) and snapshot their lines."""
     nos = sorted(set(nos))
     if db.pg:  # one refresh at a time: two overlapping pulls used to leave every ERP line in twice
         db.q("SELECT pg_advisory_xact_lock(8137201)")
     t = now()
+    dns = [n for n in nos if is_dn(n)]
+    nos = [n for n in nos if not is_dn(n)]
+    for i in range(0, len(dns), 100):
+        chunk = dns[i:i + 100]
+        rows = erp_list("Delivery Note",
+                        ["name", "customer", "status", "docstatus", "is_return", "posting_date", "custom_fe_order_no", "custom_is_b2b",
+                         "`tabDelivery Note Item`.item_code", "`tabDelivery Note Item`.qty",
+                         "`tabDelivery Note Item`.rate", "`tabDelivery Note Item`.amount", "`tabDelivery Note Item`.name as erp_row"],
+                        [["name", "in", chunk]])
+        db.q(f"DELETE FROM erp_lines WHERE saleor_no IN ({ph(len(chunk))})", chunk)
+        info = {}
+        for r in rows:
+            no = str(r.get("name") or "").strip().upper()
+            st = r.get("status") or ""
+            st = "Cancelled" if r.get("docstatus") == 2 or st in ("Cancel", "Cancelled") else "Return" if r.get("is_return") else st
+            info[no] = {"fe": str(r.get("custom_fe_order_no") or "").strip(), "b2b": bool(r.get("custom_is_b2b")), "erp_status": r.get("status")}
+            db.q("INSERT INTO erp_lines (saleor_no, so_name, customer, so_status, so_date, sku, qty, rate, amount, fetched_at, erp_row) "
+                 "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                 (no, r.get("name"), r.get("customer"), st, str(r.get("posting_date") or ""), r.get("item_code"),
+                  abs(float(r.get("qty") or 0)), float(r.get("rate") or 0), abs(float(r.get("amount") or 0)), t, r.get("erp_row")))
+        for no in chunk:
+            db.q("INSERT INTO erp_fetch (saleor_no, found, fetched_at, info) VALUES (?,?,?,?) "
+                 "ON CONFLICT (saleor_no) DO UPDATE SET found = excluded.found, fetched_at = excluded.fetched_at, info = excluded.info",
+                 (no, 1 if no in info else 0, t, json.dumps(info.get(no) or {})))
     for i in range(0, len(nos), 100):
         chunk = nos[i:i + 100]
         rows = erp_list("Sales Order",
@@ -364,7 +394,8 @@ def erp_snapshot(db, nos):
         return out
     nos = list(nos)
     for r in db.q(f"SELECT * FROM erp_fetch WHERE saleor_no IN ({ph(len(nos))})", nos):
-        out[r["saleor_no"]] = {"found": bool(r["found"]), "fetched_at": r["fetched_at"], "sos": {}}
+        out[r["saleor_no"]] = {"found": bool(r["found"]), "fetched_at": r["fetched_at"], "sos": {},
+                               "info": json.loads(r["info"]) if r.get("info") else {}}
     seen = set()
     for r in db.q(f"SELECT * FROM erp_lines WHERE saleor_no IN ({ph(len(nos))}) ORDER BY id", nos):
         if r.get("erp_row"):
@@ -379,13 +410,13 @@ def erp_snapshot(db, nos):
 
 
 def summarize_no(e):
-    """Flatten one front-end order number's ERP snapshot to a display summary."""
+    """Flatten one front-end order number's (or DN's) ERP snapshot to a display summary."""
     if not e or not e["found"]:
         return {"found": False}
     sos = list(e["sos"].values())
-    live = [s for s in sos if s["status"] != "Cancelled"]
+    live = [s for s in sos if s["status"] not in DEAD]
     use = live or sos
-    return {"found": True, "cancelled": not live, "so": ", ".join(s["so"] for s in use),
+    return {"found": True, "cancelled": not live, "is_return": any(s["status"] == "Return" for s in sos), "info": e.get("info") or {}, "so": ", ".join(s["so"] for s in use),
             "customer": use[0]["customer"] if use else "", "status": ", ".join(sorted({s["status"] for s in use})),
             "date": min((s["date"] for s in use), default=""),
             "qty": sum(l["qty"] for s in live for l in s["lines"]),
@@ -556,7 +587,7 @@ def build_orders(db):
             continue
         oids = sorted(set(no_orders[no]), key=lambda i: by_o[i]["created_at"] or "")
         for so in e["sos"].values():
-            if so["status"] == "Cancelled":
+            if so["status"] in DEAD:
                 continue
             for ln in so["lines"]:
                 q, sku = ln["qty"], ln["sku"]
@@ -1154,7 +1185,12 @@ def a_order_cancel(ctx, qs, body):
         raise ApiError(400, "Give the reason for cancelling")
     db.q("UPDATE orders SET status = 'cancelled', cancel_reason = ?, cancelled_by = ?, cancelled_at = ?, updated_at = ? WHERE id = ?",
          (reason or None, ctx.name, now(), now(), o["id"]))
-    ctx.log(o["id"], ("Order cancelled in full (ERP links kept for reference)" if linked else "Order cancelled")
+    drop, nos = linked and body.get("unlink"), []
+    if drop:
+        nos = [r["saleor_no"] for r in db.q("SELECT saleor_no FROM order_links WHERE order_id = ?", (o["id"],))]
+        db.q("DELETE FROM order_links WHERE order_id = ?", (o["id"],))
+    ctx.log(o["id"], ("Order cancelled in full; ERP links removed (%s), so its billed units no longer count" % ", ".join(nos) if drop
+                      else "Order cancelled in full (ERP links kept, billed units still count)" if linked else "Order cancelled")
             + (": " + reason if reason else ""))
     return {"ok": True}
 
@@ -1227,7 +1263,8 @@ def _parse_nos(raw):
     good, bad = [], []
     for t in toks:
         t2 = t.lstrip("#")
-        (good if ORDER_NO_RE.match(t2) else bad).append(t2)
+        t2 = t2.upper() if is_dn(t2) else t2
+        (good if ORDER_NO_RE.match(t2) or is_dn(t2) else bad).append(t2)
     seen = []
     for g in good:
         if g not in seen:
@@ -1246,11 +1283,18 @@ def _link_checks(ctx, o, nos):
         s = summarize_no(snap.get(no))
         s["no"] = no
         errors, warns = [], []
+        dn, info = is_dn(no), s.get("info") or {}
         if not s["found"]:
-            errors.append("Not found among ERP B2B sales orders")
+            errors.append("Not found among ERP Delivery Notes" if dn else "Not found among ERP B2B sales orders")
         else:
-            if s["cancelled"]:
-                errors.append("ERP order is cancelled")
+            if s["is_return"]:
+                errors.append("This is a return Delivery Note")
+            elif s["cancelled"]:
+                errors.append("Delivery Note is cancelled" if dn else "ERP order is cancelled")
+            if dn and not info.get("b2b"):
+                warns.append("Not marked B2B in ERP")
+            if dn and info.get("erp_status") == "Return Issued":
+                warns.append("Goods on this Delivery Note were returned (ERP status: Return Issued)")
             if norm_name(s["customer"]) != norm_name(dealer["name"]):
                 warns.append("Different customer in ERP: %s (this order is for %s)" % (s["customer"], dealer["name"]))
             if my_skus and not (set(s["skus"]) & my_skus):
@@ -1258,6 +1302,17 @@ def _link_checks(ctx, o, nos):
         already_here = db.one("SELECT id FROM order_links WHERE order_id = ? AND saleor_no = ?", (o["id"], no))
         if already_here:
             errors.append("Already linked to this order")
+        # a DN and the front-end ID it was shipped against are the same goods: only one of them may count
+        if dn and info.get("fe"):
+            for x in db.q("SELECT k.order_id, o.ref FROM order_links k JOIN orders o ON o.id = k.order_id WHERE k.saleor_no = ?", (info["fe"],)):
+                if x["order_id"] == o["id"]:
+                    errors.append("Already counted: front-end ID %s on this order is the same shipment" % info["fe"])
+                else:
+                    warns.append("Its front-end ID %s is linked to %s, so the units would count twice" % (info["fe"], x["ref"]))
+        if not dn:
+            for x in db.q("SELECT k.saleor_no FROM order_links k JOIN erp_fetch f ON f.saleor_no = k.saleor_no "
+                          "WHERE k.order_id = ? AND f.info LIKE ?", (o["id"], '%"fe": "' + no + '"%')):
+                errors.append("Already counted through %s on this order" % x["saleor_no"])
         others = db.q("SELECT o.ref, d.name AS dealer FROM order_links k JOIN orders o ON o.id = k.order_id "
                       "LEFT JOIN dealers d ON d.id = o.dealer_id WHERE k.saleor_no = ? AND k.order_id <> ?", (no, o["id"]))
         if others:
@@ -1275,7 +1330,7 @@ def a_link_check(ctx, qs, body):
         raise ApiError(400, "%s isn't open for billing" % o["ref"])
     nos, bad = _parse_nos(body.get("numbers"))
     if not nos and not bad:
-        raise ApiError(400, "Enter at least one order ID")
+        raise ApiError(400, "Enter at least one order ID or DN number")
     res = _link_checks(ctx, o, nos)
     ctx.db.commit()
     return {"results": res, "invalid": bad}
@@ -1289,7 +1344,7 @@ def a_link_commit(ctx, qs, body):
         raise ApiError(400, "%s isn't open for billing" % o["ref"])
     nos, bad = _parse_nos(body.get("numbers"))
     if bad:
-        raise ApiError(400, "Not valid order IDs: " + ", ".join(bad))
+        raise ApiError(400, "Not valid order IDs / DN numbers: " + ", ".join(bad))
     res = _link_checks(ctx, o, nos)
     errs = [r for r in res if r["errors"]]
     if errs:
@@ -1300,7 +1355,8 @@ def a_link_commit(ctx, qs, body):
     for r in res:
         db.q("INSERT INTO order_links (order_id, saleor_no, note, flags, linked_by, linked_at) VALUES (?,?,?,?,?,?)",
              (o["id"], r["no"], (body.get("note") or "").strip(), json.dumps(r["warnings"]), ctx.name, t))
-        ctx.log(o["id"], "Linked ERP order %s (%s)%s" % (r["no"], r.get("so") or "", " — exception confirmed" if r["warnings"] else ""))
+        ctx.log(o["id"], ("Linked Delivery Note %s" % r["no"] if is_dn(r["no"]) else "Linked ERP order %s (%s)" % (r["no"], r.get("so") or ""))
+                + (" — exception confirmed" if r["warnings"] else ""))
     return {"ok": True, "linked": [r["no"] for r in res]}
 
 
@@ -1309,7 +1365,7 @@ def a_unlink(ctx, qs, body):
     o = load_order(ctx.db, body.get("order_id"))
     no = str(body.get("no") or "")
     ctx.db.q("DELETE FROM order_links WHERE order_id = ? AND saleor_no = ?", (o["id"], no))
-    ctx.log(o["id"], "Unlinked ERP order %s" % no)
+    ctx.log(o["id"], ("Unlinked Delivery Note %s" if is_dn(no) else "Unlinked ERP order %s") % no)
     return {"ok": True}
 
 
