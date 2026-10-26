@@ -1,1 +1,3 @@
-pg8000>=1.31
+# scramp 1.5.0 dropped make_channel_binding, which pg8000 needs to log in to Neon: keep these two pinned together
+pg8000==1.31.5
+scramp==1.4.18
