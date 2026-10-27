@@ -210,7 +210,7 @@ def ph(n):
 _SCHEMA_OK = False
 
 
-SCHEMA_V = "2026-10-26"  # bump when ensure_schema gains a table / column
+SCHEMA_V = "2026-10-27"  # bump when ensure_schema gains a table / column
 
 
 def ensure_schema(db):
@@ -261,7 +261,8 @@ def ensure_schema(db):
                             ("dealers", "is_intl", "INTEGER DEFAULT 0"), ("dealers", "country", "TEXT"),
                             ("dealers", "ship_addrs", "TEXT"), ("team_members", "avatar", "TEXT"),
                             ("orders", "cancel_reason", "TEXT"), ("orders", "cancelled_by", "TEXT"), ("orders", "cancelled_at", "TEXT"),
-                            ("erp_lines", "erp_row", "TEXT"), ("erp_fetch", "info", "TEXT")):
+                            ("erp_lines", "erp_row", "TEXT"), ("erp_fetch", "info", "TEXT"),
+                            ("orders", "awb", "TEXT"), ("orders", "courier", "TEXT")):
         if db.pg:
             db.q("ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s %s" % (table, col, typ))
         elif col not in {r["name"] for r in db.q("PRAGMA table_info(%s)" % table)}:
@@ -332,6 +333,15 @@ def sku_map():
     return _ITEMS["map"]
 
 
+def _courier(x):
+    x = re.sub(r"\s+", " ", str(x or "")).strip()
+    return x.title() if x.isupper() or x.islower() else x
+
+
+def _ship(r):
+    return {"dn": r.get("name"), "awb": str(r.get("custom_awb_number") or "").strip(), "courier": _courier(r.get("custom_assigned_delivery_partner"))}
+
+
 def erp_refresh(db, nos):
     """Pull the B2B Sales Orders for these front-end order numbers (and Delivery Notes for DN numbers) and snapshot their lines."""
     nos = sorted(set(nos))
@@ -344,6 +354,7 @@ def erp_refresh(db, nos):
         chunk = dns[i:i + 100]
         rows = erp_list("Delivery Note",
                         ["name", "customer", "status", "docstatus", "is_return", "posting_date", "custom_fe_order_no", "custom_is_b2b",
+                         "custom_awb_number", "custom_assigned_delivery_partner",
                          "`tabDelivery Note Item`.item_code", "`tabDelivery Note Item`.qty",
                          "`tabDelivery Note Item`.rate", "`tabDelivery Note Item`.amount", "`tabDelivery Note Item`.name as erp_row"],
                         [["name", "in", chunk]])
@@ -353,7 +364,9 @@ def erp_refresh(db, nos):
             no = str(r.get("name") or "").strip().upper()
             st = r.get("status") or ""
             st = "Cancelled" if r.get("docstatus") == 2 or st in ("Cancel", "Cancelled") else "Return" if r.get("is_return") else st
-            info[no] = {"fe": str(r.get("custom_fe_order_no") or "").strip(), "b2b": bool(r.get("custom_is_b2b")), "erp_status": r.get("status")}
+            if no not in info:
+                info[no] = {"fe": str(r.get("custom_fe_order_no") or "").strip(), "b2b": bool(r.get("custom_is_b2b")), "erp_status": r.get("status"),
+                            "ship": [_ship(r)] if r.get("custom_awb_number") and st not in DEAD else []}
             db.q("INSERT INTO erp_lines (saleor_no, so_name, customer, so_status, so_date, sku, qty, rate, amount, fetched_at, erp_row) "
                  "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                  (no, r.get("name"), r.get("customer"), st, str(r.get("posting_date") or ""), r.get("item_code"),
@@ -381,10 +394,23 @@ def erp_refresh(db, nos):
                  (no, r.get("name"), r.get("customer"), r.get("status"), str(r.get("transaction_date") or ""),
                   r.get("item_code"), float(r.get("qty") or 0), float(r.get("rate") or 0),
                   float(r.get("amount") or 0), t, r.get("erp_row")))
+        ship = {}  # the Delivery Notes shipped against these front-end IDs carry the AWB and courier
+        try:
+            for r in erp_list("Delivery Note", ["name", "status", "custom_fe_order_no", "custom_awb_number", "custom_assigned_delivery_partner"],
+                              [["custom_fe_order_no", "in", chunk], ["is_return", "=", 0], ["docstatus", "<", 2],
+                               ["status", "not in", ["Cancel", "Cancelled"]], ["custom_awb_number", "is", "set"]]):
+                ship.setdefault(str(r.get("custom_fe_order_no") or "").strip(), []).append(_ship(r))
+        except Exception:  # AWBs are a nice-to-have: never fail the billed figures over them
+            ship = None
         for no in chunk:
-            db.q("INSERT INTO erp_fetch (saleor_no, found, fetched_at) VALUES (?,?,?) "
-                 "ON CONFLICT (saleor_no) DO UPDATE SET found = excluded.found, fetched_at = excluded.fetched_at",
-                 (no, 1 if no in found else 0, t))
+            if ship is None:
+                db.q("INSERT INTO erp_fetch (saleor_no, found, fetched_at) VALUES (?,?,?) "
+                     "ON CONFLICT (saleor_no) DO UPDATE SET found = excluded.found, fetched_at = excluded.fetched_at",
+                     (no, 1 if no in found else 0, t))
+            else:
+                db.q("INSERT INTO erp_fetch (saleor_no, found, fetched_at, info) VALUES (?,?,?,?) "
+                     "ON CONFLICT (saleor_no) DO UPDATE SET found = excluded.found, fetched_at = excluded.fetched_at, info = excluded.info",
+                     (no, 1 if no in found else 0, t, json.dumps({"ship": ship.get(no, [])})))
 
 
 def erp_snapshot(db, nos):
@@ -677,6 +703,8 @@ def build_orders(db):
             "close_reason": o["close_reason"],
             "cancel_reason": o.get("cancel_reason"), "cancelled_by": o.get("cancelled_by"), "cancelled_at": o.get("cancelled_at"),
             "lines": L, "extras": extras[oid], "links": lk, "billed_by_day": by_day[oid],
+            "ship": list({x["awb"]: x for k in lk for x in (k.get("info") or {}).get("ship", [])}.values()),
+            "awb": o.get("awb") or "", "courier": o.get("courier") or "",
             "tot": {"oq": oq, "ov": ov, "bq": bq, "bv": bv, "pq": pq, "pv": pv, "cq": cq, "cv": cv, "bvo": bvo,
                     "eq": sum(x["qty"] for x in extras[oid]), "ev": sum(x["qty"] * (x["rate"] or 0) for x in extras[oid])},
         })
@@ -1192,6 +1220,22 @@ def a_order_cancel(ctx, qs, body):
     ctx.log(o["id"], ("Order cancelled in full; ERP links removed (%s), so its billed units no longer count" % ", ".join(nos) if drop
                       else "Order cancelled in full (ERP links kept, billed units still count)" if linked else "Order cancelled")
             + (": " + reason if reason else ""))
+    return {"ok": True}
+
+
+def a_order_awb(ctx, qs, body):  # backend: AWB + courier typed in, for shipments ERP has no AWB for
+    ctx.need_backend()
+    o = load_order(ctx.db, body.get("id"))
+    awb = re.sub(r"\s+", " ", str(body.get("awb") or "")).strip()[:60]
+    cr = re.sub(r"\s+", " ", str(body.get("courier") or "")).strip()[:60]
+    if awb and not cr:
+        raise ApiError(400, "Add the courier partner too")
+    if cr and not awb:
+        raise ApiError(400, "Add the AWB number too")
+    if (awb, cr) == (o.get("awb") or "", o.get("courier") or ""):
+        return {"ok": True}
+    ctx.db.q("UPDATE orders SET awb = ?, courier = ?, updated_at = ? WHERE id = ?", (awb or None, cr or None, now(), o["id"]))
+    ctx.log(o["id"], "AWB set: %s (%s)" % (awb, cr) if awb else "AWB removed")
     return {"ok": True}
 
 
@@ -1713,7 +1757,7 @@ ACTIONS = {
     "boot": a_boot, "items": a_items, "orders": a_orders,
     "dealer_save": a_dealer_save, "dealer_check": a_dealer_check, "dealer_tag": a_dealer_tag,
     "team_save": a_team_save, "team_delete": a_team_delete, "settings_save": a_settings_save,
-    "order_save": a_order_save, "order_cancel": a_order_cancel, "order_close": a_order_close,
+    "order_save": a_order_save, "order_cancel": a_order_cancel, "order_close": a_order_close, "order_awb": a_order_awb,
     "sheet": a_sheet, "link_check": a_link_check, "link_commit": a_link_commit, "unlink": a_unlink,
     "my_avatar": a_my_avatar, "prefs": a_prefs, "sales": a_sales, "erp_refresh": a_erp_refresh,
     "digest": a_digest, "digest_list": a_digest_list, "digest_save": a_digest_save, "digest_remove": a_digest_remove,
