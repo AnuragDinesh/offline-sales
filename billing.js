@@ -704,6 +704,7 @@ function orderCols(desk, st, allSel) {
     { k: "status", h: "Status", w: 190, tc: "wrapc", sv: o => STAGE_ORD[o.stage], td: statusCell },
     { k: "erp", h: "ERP order IDs", w: 140, tc: "tnum wrapc", sv: o => o.links.map(l => l.no).join(" "), td: o => o.links.map(l => `<span class="erpid ${l.found === false || l.cancelled ? "bad" : ""}">${esc(l.no)}</span>`).join(" ") || '<span class="mut">&#8212;</span>' },
     { k: "awb", h: "AWB / Courier", w: 170, tc: "wrapc", sv: o => shipsOf(o).map(x => x.awb).join(" "), td: o => shipHtml(o) || '<span class="mut">&#8212;</span>' },
+    { k: "bdate", h: "Billing date", w: 112, tc: "tnum wrapc", sv: o => billDates(o)[0] || "", td: o => billDates(o).map(d => `<div>${shortDate(d)}</div>`).join("") || '<span class="mut">&#8212;</span>' },
     { k: "by", h: "Entered by", hide: true, w: 120, sv: o => o.created_by || "", td: o => esc(o.created_by || "") },
     { k: "sheet", h: "Billing sheet", hide: true, w: 110, sv: o => o.sheet_at || "", td: o => o.sheet_at ? dShort(o.sheet_at) : '<span class="mut">&#8212;</span>' });
   if (desk) c.push({ k: "act", fixed: true, w: 128, h: "", tc: "acts", td: o => o.stage === "tobill" ? `<button class="btn sm" data-sheet="${o.id}">Billing sheet</button>` : ACTION.includes(o.stage) ? `<button class="btn sm" data-link="${o.id}">+ ERP ID</button>` : "" });
@@ -820,17 +821,19 @@ function exportOrders(list, kind, title) {
     const rows = []; list.forEach(o => o.lines.forEach(l => { const it = item(l.sku); rows.push([o.ref, (o.submitted_at || o.created_at || "").slice(0, 10), o.dealer, o.team || "", (STG[o.stage] || [o.stage])[0], l.sku, it.name, it.col, it.size, l.qty, l.price, l.billed, l.pending, Math.round(l.billed * l.price), Math.round(l.pending * l.price)]); }));
     downloadXLS(title + " SKU lines", head, rows); return;
   }
-  const head = ["Order", "Date", "Dealer", "Team member", "Status", "Ordered units", "Ordered value", "Billed units", "Billed value", "Extra billed units", "Extra billed value", "Pending units", "Pending value", "Cancelled / closed value", "ERP order IDs", "AWB numbers", "Courier"];
-  const rows = list.map(o => [o.ref, (o.submitted_at || o.created_at || "").slice(0, 10), o.dealer, o.team || "", (STG[o.stage] || [o.stage])[0], o.tot.oq, Math.round(o.tot.ov), o.tot.bq, Math.round(o.tot.bvo), o.tot.eq || 0, Math.round(o.tot.ev || 0), o.tot.pq, Math.round(o.tot.pv), Math.round(o.tot.cv), o.links.map(l => l.no).join(" "), shipsOf(o).map(x => x.awb).join(" "), [...new Set(shipsOf(o).map(x => x.courier))].join(", ")]);
+  const head = ["Order", "Date", "Dealer", "Team member", "Status", "Ordered units", "Ordered value", "Billed units", "Billed value", "Extra billed units", "Extra billed value", "Pending units", "Pending value", "Cancelled / closed value", "ERP order IDs", "AWB numbers", "Courier", "Billing date", "Invoice numbers"];
+  const rows = list.map(o => [o.ref, (o.submitted_at || o.created_at || "").slice(0, 10), o.dealer, o.team || "", (STG[o.stage] || [o.stage])[0], o.tot.oq, Math.round(o.tot.ov), o.tot.bq, Math.round(o.tot.bvo), o.tot.eq || 0, Math.round(o.tot.ev || 0), o.tot.pq, Math.round(o.tot.pv), Math.round(o.tot.cv), o.links.map(l => l.no).join(" "), shipsOf(o).map(x => x.awb).join(" "), [...new Set(shipsOf(o).map(x => x.courier))].join(", "), billDates(o).join(" "), billsOf(o).map(x => x.inv).join(" ")]);
   if (kind === "xls") downloadXLS(title, head, rows); else downloadCSV(title, head, rows);
 }
 
 /* ---------- AWB / courier ---------- */
-const shipsOf = o => (o.ship || []).concat(o.awb && !(o.ship || []).some(x => x.awb === o.awb) ? [{ awb: o.awb, courier: o.courier, manual: true }] : []);
+const shipsOf = o => (o.ship || []).filter(x => x.awb).concat(o.awb && !(o.ship || []).some(x => x.awb === o.awb) ? [{ awb: o.awb, courier: o.courier, manual: true }] : []);
+const billsOf = o => (o.ship || []).filter(x => x.bill_date).sort((a, b) => a.bill_date.localeCompare(b.bill_date));
+const billDates = o => [...new Set(billsOf(o).map(x => x.bill_date))];
 const shipHtml = o => shipsOf(o).map(x => `<div><b class="tnum">${esc(x.awb)}</b> <span class="mut">${esc(x.courier || "")}${x.manual ? " &#183; manual" : ""}</span></div>`).join("");
 function openAwb(o) {
   const known = [...new Set((ORDERS || []).flatMap(x => shipsOf(x).map(s => s.courier)).filter(Boolean))].sort();
-  const erp = o.ship || [];
+  const erp = shipsOf(o).filter(x => !x.manual);
   const m = modal(`<div class="mh"><h3>AWB &#183; ${esc(o.ref)}</h3><button data-close>&times;</button></div>
    <div class="mbody">${erp.length ? `<p class="mut" style="margin-top:0">From ERP: ${erp.map(x => `<b>${esc(x.awb)}</b> (${esc(x.courier || "")}, ${esc(x.dn || "")})`).join(", ")}. Add one here only for a shipment ERP doesn't have.</p>` : `<p class="mut" style="margin-top:0">ERP has no AWB for this order &#8212; enter it here.</p>`}
     <label class="field"><span>AWB number</span><input id="aw-n" value="${attr(o.awb || "")}" placeholder="e.g. 3662576543"></label>
@@ -883,6 +886,7 @@ async function openOrder(id) {
      <div class="kv"><span>Submitted</span><b>${o.submitted_at ? dLong(o.submitted_at) : "— draft"}</b></div><div class="kv" style="grid-column:span 2"><span>Billing sheet</span><b>${o.sheet_at ? dLong(o.sheet_at) + (o.warehouse ? " · " + esc(o.warehouse) : "") : "—"}</b></div>
      <div class="kv" style="grid-column:1/-1"><span>Ship to</span><b style="font-weight:500">${o.ship_to && o.ship_to.label ? "<b>" + esc(o.ship_to.label) + "</b> &#183; " : ""}${esc(o.ship_to ? o.ship_to.text : "")}${o.ship_to && o.ship_to.gstin ? " &#183; GSTIN " + esc(o.ship_to.gstin) : ""}</b></div>
      ${o.dealer_ov ? `<div class="kv" style="grid-column:1/-1"><span>Dealer details &#8212; edited for this order only</span><b style="font-weight:500">${esc([o.dealer_ov.gstin || "No GSTIN", o.dealer_ov.phone, addrText(o.dealer_ov, "bill")].filter(Boolean).join(" · "))}${o.dealer_ov.ship_same ? "" : " &#183; ship to " + esc(addrText(o.dealer_ov, "ship"))}</b></div>` : ""}
+     <div class="kv" style="grid-column:1/-1"><span>Billing date (ERP invoice)</span><b style="font-weight:500">${billsOf(o).map(x => `<div><b class="tnum">${dShort(x.bill_date)}</b> <span class="mut">${esc(x.inv)} &#183; ${esc(x.dn)}</span></div>`).join("") || '<span class="mut">Not invoiced yet</span>'}</b></div>
      <div class="kv" style="grid-column:1/-1"><span>AWB / Courier</span><b style="font-weight:500">${shipHtml(o) || '<span class="mut">None yet</span>'}${isBE() && !ro ? ` <button class="lnk" data-a="awb">${o.awb ? "Edit manual AWB" : "+ Add AWB manually"}</button>` : ""}</b></div>
      ${o.remarks ? `<div class="kv" style="grid-column:1/-1"><span>Remarks</span><b style="font-weight:500">${esc(o.remarks)}</b></div>` : ""}
      ${o.closed_at ? `<div class="kv" style="grid-column:1/-1"><span>Pending closed</span><b style="font-weight:500">${esc(o.close_reason || "")} &#8212; ${esc(o.closed_by || "")}, ${dLong(o.closed_at)} (${units(t.cq)} units)</b></div>` : ""}

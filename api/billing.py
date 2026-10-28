@@ -291,9 +291,9 @@ def _erp_headers():
     return {"Authorization": "token %s:%s" % (key, secret)}
 
 
-def erp_list(doctype, fields, filters, limit=0):
-    params = urllib.parse.urlencode({"filters": json.dumps(filters), "fields": json.dumps(fields),
-                                     "limit_page_length": limit})
+def erp_list(doctype, fields, filters, limit=0, group_by=None):
+    params = urllib.parse.urlencode(dict({"filters": json.dumps(filters), "fields": json.dumps(fields),
+                                          "limit_page_length": limit}, **({"group_by": group_by} if group_by else {})))
     url = ERP_BASE + "/api/resource/" + urllib.parse.quote(doctype) + "?" + params
     req = urllib.request.Request(url, headers=_erp_headers())
     with urllib.request.urlopen(req, timeout=25) as resp:
@@ -339,7 +339,24 @@ def _courier(x):
 
 
 def _ship(r):
-    return {"dn": r.get("name"), "awb": str(r.get("custom_awb_number") or "").strip(), "courier": _courier(r.get("custom_assigned_delivery_partner"))}
+    return {"dn": r.get("name"), "awb": str(r.get("custom_awb_number") or "").strip(), "courier": _courier(r.get("custom_assigned_delivery_partner")),
+            "inv": "", "bill_date": ""}
+
+
+def _add_invoices(ships):
+    """Billing date = posting date of the ERP Sales Invoice made against each Delivery Note."""
+    by = {}
+    for x in ships:
+        by.setdefault(x["dn"], []).append(x)
+    names = sorted(by)
+    for i in range(0, len(names), 100):
+        for r in erp_list("Sales Invoice", ["name", "posting_date", "`tabSales Invoice Item`.delivery_note as dn"],
+                          [["Sales Invoice Item", "delivery_note", "in", names[i:i + 100]], ["docstatus", "=", 1], ["is_return", "=", 0]],
+                          group_by="`tabSales Invoice`.name, `tabSales Invoice Item`.delivery_note"):
+            for x in by.get(r.get("dn"), []):
+                d = str(r.get("posting_date") or "")[:10]
+                if not x["bill_date"] or d < x["bill_date"]:
+                    x["inv"], x["bill_date"] = r.get("name") or "", d
 
 
 def erp_refresh(db, nos):
@@ -366,11 +383,15 @@ def erp_refresh(db, nos):
             st = "Cancelled" if r.get("docstatus") == 2 or st in ("Cancel", "Cancelled") else "Return" if r.get("is_return") else st
             if no not in info:
                 info[no] = {"fe": str(r.get("custom_fe_order_no") or "").strip(), "b2b": bool(r.get("custom_is_b2b")), "erp_status": r.get("status"),
-                            "ship": [_ship(r)] if r.get("custom_awb_number") and st not in DEAD else []}
+                            "ship": [_ship(r)] if st not in DEAD else []}
             db.q("INSERT INTO erp_lines (saleor_no, so_name, customer, so_status, so_date, sku, qty, rate, amount, fetched_at, erp_row) "
                  "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                  (no, r.get("name"), r.get("customer"), st, str(r.get("posting_date") or ""), r.get("item_code"),
                   abs(float(r.get("qty") or 0)), float(r.get("rate") or 0), abs(float(r.get("amount") or 0)), t, r.get("erp_row")))
+        try:
+            _add_invoices([x for v in info.values() for x in v["ship"]])
+        except Exception:  # billing dates are a nice-to-have: never fail the billed figures over them
+            pass
         for no in chunk:
             db.q("INSERT INTO erp_fetch (saleor_no, found, fetched_at, info) VALUES (?,?,?,?) "
                  "ON CONFLICT (saleor_no) DO UPDATE SET found = excluded.found, fetched_at = excluded.fetched_at, info = excluded.info",
@@ -398,8 +419,12 @@ def erp_refresh(db, nos):
         try:
             for r in erp_list("Delivery Note", ["name", "status", "custom_fe_order_no", "custom_awb_number", "custom_assigned_delivery_partner"],
                               [["custom_fe_order_no", "in", chunk], ["is_return", "=", 0], ["docstatus", "<", 2],
-                               ["status", "not in", ["Cancel", "Cancelled"]], ["custom_awb_number", "is", "set"]]):
+                               ["status", "not in", ["Cancel", "Cancelled"]]]):
                 ship.setdefault(str(r.get("custom_fe_order_no") or "").strip(), []).append(_ship(r))
+            try:
+                _add_invoices([x for v in ship.values() for x in v])
+            except Exception:
+                pass
         except Exception:  # AWBs are a nice-to-have: never fail the billed figures over them
             ship = None
         for no in chunk:
@@ -703,7 +728,7 @@ def build_orders(db):
             "close_reason": o["close_reason"],
             "cancel_reason": o.get("cancel_reason"), "cancelled_by": o.get("cancelled_by"), "cancelled_at": o.get("cancelled_at"),
             "lines": L, "extras": extras[oid], "links": lk, "billed_by_day": by_day[oid],
-            "ship": list({x["awb"]: x for k in lk for x in (k.get("info") or {}).get("ship", [])}.values()),
+            "ship": list({x["dn"]: x for k in lk for x in (k.get("info") or {}).get("ship", [])}.values()),
             "awb": o.get("awb") or "", "courier": o.get("courier") or "",
             "tot": {"oq": oq, "ov": ov, "bq": bq, "bv": bv, "pq": pq, "pv": pv, "cq": cq, "cv": cv, "bvo": bvo,
                     "eq": sum(x["qty"] for x in extras[oid]), "ev": sum(x["qty"] * (x["rate"] or 0) for x in extras[oid])},
